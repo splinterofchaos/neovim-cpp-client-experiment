@@ -39,6 +39,12 @@ void die_errno(const char* failedAt)
   exit(errno);
 }
 
+template<typename POD>
+void zero(POD& pod)
+{
+  bzero((char *) &pod, sizeof(pod));
+}
+
 std::string socket_error_msg()
 {
 
@@ -163,8 +169,11 @@ struct UnixSocket
   UnixSocket();
   ~UnixSocket();
 
+  /// Connects to an arbitrary sockaddr type.
   template<typename Addr>
   bool connect_addr(const Addr& addr);
+
+  /// Connects to `path` using a unix address.
   bool connect_local(const char *path);
 
   int send(const char *buf, size_t len);
@@ -189,19 +198,13 @@ bool UnixSocket::connect_addr(const Addr& addr)
   return connect(fd, (sockaddr*)&addr, sizeof(addr)) >= 0;
 }
 
-template<typename POD>
-void zero(POD& pod)
-{
-  bzero((char *) &pod, sizeof(pod));
-}
-
-sockaddr_un server_address(const char *path)
+bool UnixSocket::connect_local(const char *path)
 {
   sockaddr_un addr;
   zero(addr);
   addr.sun_family = AF_UNIX;
   strcpy(addr.sun_path, path);
-  return addr;
+  return connect_addr(addr);
 }
 
 int UnixSocket::send(const char *buf, size_t len)
@@ -283,8 +286,6 @@ struct NeoServer
 
   UnixSocket sock;
 
-  struct sockaddr_un serverAddress;
-
   std::vector<std::string> classes;
   std::vector<NeoFunc>     functions;
 
@@ -309,9 +310,7 @@ NeoServer::NeoServer()
   if (!ok(sock))
     die_errno("Failed opening socket:\n");
 
-  serverAddress = server_address("/tmp/neovim");
-
-  if (!sock.connect_addr(serverAddress))
+  if (!sock.connect_local("/tmp/neovim"))
     die_errno("Failed connecting to server:\n");
 }
 
@@ -355,7 +354,7 @@ msgpack::object NeoServer::get_response()
   }
 
   uint64_t msgType = replyArray.ptr[0].via.u64;
-  if (msgType != 1) {
+  if (msgType != RESPONSE) {
     std::cerr << "Message type must be 1 (response)." << std::endl;
     exit(1);
   }
