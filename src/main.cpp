@@ -290,7 +290,7 @@ struct NeoServer
 
   NeoServer();
 
-  static const uint64_t REQUEST;
+  static const uint64_t REQUEST, RESPONSE, NOTIFY;
 
   template<typename T>
   void request(uint64_t method, const T& t);
@@ -298,7 +298,9 @@ struct NeoServer
   msgpack::object get_response();
 };
 
-const uint64_t NeoServer::REQUEST = 0;
+const uint64_t NeoServer::REQUEST  = 0,
+               NeoServer::RESPONSE = 1,
+               NeoServer::NOTIFY   = 2;
 
 NeoServer::NeoServer()
 {
@@ -442,7 +444,6 @@ int main()
         std::cerr << "No functions!" << std::endl;
         exit(1);
       }
-
       using Fn = std::map<std::string, msgpack::object>;
       std::vector<Fn> fns = kv.val.convert();
 
