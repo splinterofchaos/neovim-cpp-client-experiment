@@ -1,0 +1,15 @@
+# add_executable(neovimgen neovimgen.cpp)
+add_executable(cvim main.cpp)
+# set_target_properties(neovimgen PROPERTIES COMPILE_FLAGS -DNEOVIM_NO_AUTO=1)
+# target_link_libraries(neovimgen ${MSGPACK_LIBRARIES})
+target_link_libraries(cvim ${MSGPACK_LIBRARIES})
+
+# add_custom_target(
+#     neovim_auto
+#     ${NEOVIM_EXEC} --api-msgpack-metadata | ${CMAKE_BINARY_DIR}/src/neovimgen ${CMAKE_CURRENT_SOURCE_DIR}/auto/ 
+#     DEPENDS neovimgen
+# )
+
+set(NEOVIM_CURSED_SOURCES main.cpp)
+# add_library(cvim ${NEOVIM_CURSED_SOURCES})
+target_link_libraries(cvim ${MSGPACK_LIBRARIES})
