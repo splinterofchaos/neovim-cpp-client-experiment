@@ -397,7 +397,7 @@ int main()
 
   msgpack::object finalObj = resultObj.via.array.ptr[1];
   if (finalObj.type != msgpack::type::RAW) {
-    std::cerr << "Unexpected object type." << std::endl;
+    std::cerr << "Unexpected object type (final)." << std::endl;
     exit(1);
   }
 
@@ -412,7 +412,7 @@ int main()
 
   msgpack::object dataObj = res.get();
   if (dataObj.type != msgpack::type::MAP) {
-    std::cerr << "Unexpected object type." << std::endl;
+    std::cerr << "Unexpected object type (data)." << std::endl;
     exit(1);
   }
 
