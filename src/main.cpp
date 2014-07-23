@@ -308,6 +308,8 @@ struct NeoServer
   void request(uint64_t method, const T& t);
 
   msgpack::object get_response();
+
+  msgpack::unpacker up;
 };
 
 const uint64_t NeoServer::REQUEST  = 0,
@@ -341,7 +343,7 @@ void NeoServer::request(uint64_t method, const T& t)
 
 msgpack::object NeoServer::get_response()
 {
-  msgpack::unpacker up = sock.recv_msgpack();
+  up = sock.recv_msgpack();
 
   msgpack::unpacked res;
   up.next(&res);
