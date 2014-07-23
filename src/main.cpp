@@ -180,6 +180,7 @@ struct UnixSocket
   int send(const msgpack::sbuffer&);
 
   std::string recv();
+  msgpack::unpacker recv_msgpack();
 };
 
 UnixSocket::UnixSocket() 
@@ -218,7 +219,7 @@ int UnixSocket::send(const msgpack::sbuffer& b)
 }
 
 // nvim can give extreme amounts of data in one burst. Be prepared.
-constexpr size_t MAX_SIZE = 1024*1024;
+constexpr size_t MAX_SIZE = 2*1024*1024;
 
 // TODO: This is really inefficient when writing to a msgpack::unpacker.
 std::string UnixSocket::recv()
@@ -226,6 +227,16 @@ std::string UnixSocket::recv()
   char buf[MAX_SIZE];
   size_t len = ::recv(fd, buf, MAX_SIZE, 0);
   return std::string(buf, buf+len);
+}
+
+msgpack::unpacker UnixSocket::recv_msgpack()
+{
+  char buf[MAX_SIZE];
+  size_t len = ::recv(fd, buf, MAX_SIZE, 0);
+  msgpack::unpacker up(len);
+  std::copy( buf, buf+len, up.buffer() );
+  up.buffer_consumed(len);
+  return std::move(up);
 }
 
 bool ok(const UnixSocket& s)
@@ -330,11 +341,7 @@ void NeoServer::request(uint64_t method, const T& t)
 
 msgpack::object NeoServer::get_response()
 {
-  std::string buf = sock.recv();
-
-  msgpack::unpacker up(buf.size());
-  memcpy(up.buffer(), buf.data(), buf.size());
-  up.buffer_consumed(buf.size());
+  msgpack::unpacker up = sock.recv_msgpack();
 
   msgpack::unpacked res;
   up.next(&res);
