@@ -378,6 +378,24 @@ msgpack::object NeoServer::get_response()
   return replyArray.ptr[3];
 }
 
+namespace std {
+  string to_string(msgpack::type::object_type type)
+  {
+    switch(type) {
+     case msgpack::type::NIL               :  return "nil";
+     case msgpack::type::BOOLEAN           :  return "bool";
+     case msgpack::type::POSITIVE_INTEGER  :  return "+int";
+     case msgpack::type::NEGATIVE_INTEGER  :  return "-int";
+     case msgpack::type::DOUBLE            :  return "double";
+     case msgpack::type::STR               :  return "string";
+     case msgpack::type::BIN               :  return "binary";
+     case msgpack::type::ARRAY             :  return "array";
+     case msgpack::type::MAP               :  return "map";
+     default: return "unknown type";
+    }
+  }
+}
+
 int main()
 {
   NeoServer serv;
@@ -396,16 +414,18 @@ int main()
   }
 
   msgpack::object finalObj = resultObj.via.array.ptr[1];
-  if (finalObj.type != msgpack::type::RAW) {
+  if (finalObj.type != msgpack::type::STR) {
     std::cerr << "Unexpected object type (final)." << std::endl;
     exit(1);
   }
 
-  msgpack::object_raw raw = finalObj.via.raw;
+  msgpack::object_str str = finalObj.via.str;
 
-  msgpack::unpacker upData(raw.size + 1);
-  memcpy(upData.buffer(), raw.ptr, raw.size);
-  upData.buffer_consumed(raw.size);
+  std::cout << "Data:\n" << str.ptr << std::endl;
+
+  msgpack::unpacker upData(str.size + 1);
+  memcpy(upData.buffer(), str.ptr, str.size);
+  upData.buffer_consumed(str.size);
 
   msgpack::unpacked res;
   upData.next(&res);
@@ -413,6 +433,7 @@ int main()
   msgpack::object dataObj = res.get();
   if (dataObj.type != msgpack::type::MAP) {
     std::cerr << "Unexpected object type (data)." << std::endl;
+    std::cerr << "Actually: " << std::to_string(dataObj.type) << std::endl;
     exit(1);
   }
 
