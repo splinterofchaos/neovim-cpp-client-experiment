@@ -57,6 +57,16 @@ std::string UnixSocket::recv()
   return std::string(buf, buf+len);
 }
 
+int UnixSocket::recv(msgpack::unpacker& up)
+{
+  char buf[MAX_SIZE];
+  size_t len = ::recv(fd, buf, MAX_SIZE, 0);
+  std::copy( buf, buf+len, up.buffer() );
+  up.buffer_consumed(len);
+  return len;
+}
+
+#if MSGPACK_VERSION_MINOR >= 6
 msgpack::unpacker UnixSocket::recv_msgpack()
 {
   char buf[MAX_SIZE];
@@ -66,6 +76,7 @@ msgpack::unpacker UnixSocket::recv_msgpack()
   up.buffer_consumed(len);
   return std::move(up);
 }
+#endif
 
 std::string socket_error_msg()
 {
