@@ -25,3 +25,6 @@ struct UnixSocket
   msgpack::unpacker recv_msgpack();
 };
 
+/// Converts errno into a human-readable message.
+std::string socket_error_msg();
+
