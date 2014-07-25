@@ -213,8 +213,8 @@ struct NeoServer
 
   static const uint64_t REQUEST, RESPONSE, NOTIFY;
 
-  template<typename T>
-  void request(uint64_t method, const T& t);
+  template<typename T = std::vector<int>>
+  void request(uint64_t method, const T& t = T{});
 
   msgpack::object get_response();
 
@@ -310,7 +310,7 @@ int main()
 
   std::cout << "Requesting API data..." << std::endl;
 
-  serv.request(0, std::vector<int>{});
+  serv.request(0);
 
   std::vector<msgpack::object> resultObj = serv.get_response().convert();
 
@@ -349,7 +349,7 @@ int main()
   std::cout << "Enter the number of a function. " << std::endl;
   std::cin  >> n;
   
-  serv.request(n, std::vector<int>{});
+  serv.request(n);
 
   msgpack::object reply = serv.get_response().convert();
   std::cout << "Got: " << reply << std::endl;
