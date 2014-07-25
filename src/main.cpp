@@ -131,17 +131,24 @@ msgpack::object NeoServer::request(uint64_t method, const T& t)
 
   sock.send(sbuf);
 
-  up = sock.recv_msgpack();
+  sock.recv(up);
 
   msgpack::unpacked res;
   up.next(&res);
 
-  using Reply = std::tuple<uint64_t,uint64_t,msgpack::object,msgpack::object>;
   uint64_t msgType, resId; msgpack::object error, ret;
 
-  Reply reply = res.get().convert();
+  // This works on with the `poc/0.6` branch of msgpack-c:
+  /*
+   * using Reply = std::tuple<uint64_t,uint64_t,msgpack::object,msgpack::object>;
+   * std::tie(msgType,resId,error,ret) = res.get().convert();
+   */
 
-  std::tie(msgType,resId,error,ret) = reply;
+  std::vector<msgpack::object> reply = res.get().convert();
+  msgType = reply[0].convert();
+  resId   = reply[1].convert();
+  error   = reply[2];
+  ret     = reply[3];
 
   if (msgType != RESPONSE) {
     std::cerr << "Message type must be 1 (response)." << std::endl;
@@ -174,8 +181,13 @@ namespace std {
      case msgpack::type::POSITIVE_INTEGER  :  return "+int";
      case msgpack::type::NEGATIVE_INTEGER  :  return "-int";
      case msgpack::type::DOUBLE            :  return "double";
+#if MSGPACK_VERSION_MINOR >= 6
+     // msgpack 0.6 differentiates between raw data (BIN) and strings.
      case msgpack::type::STR               :  return "string";
      case msgpack::type::BIN               :  return "binary";
+#else
+     case msgpack::type::RAW               :  return "raw";
+#endif
      case msgpack::type::ARRAY             :  return "array";
      case msgpack::type::MAP               :  return "map";
      default: return "unknown type";

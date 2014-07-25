@@ -2,7 +2,6 @@
 add_executable(cvim main.cpp)
 # set_target_properties(neovimgen PROPERTIES COMPILE_FLAGS -DNEOVIM_NO_AUTO=1)
 # target_link_libraries(neovimgen ${MSGPACK_LIBRARIES})
-# target_link_libraries(cvim ${MSGPACK_LIBRARIES})
 
 # add_custom_target(
 #     neovim_auto
@@ -12,4 +11,4 @@ add_executable(cvim main.cpp)
 
 set(NEOVIM_CURSED_SOURCES Socket.cpp)
 add_library(Socket Socket.cpp)
-target_link_libraries(cvim Socket)
+target_link_libraries(cvim ${MSGPACK_LIBRARIES} Socket)
