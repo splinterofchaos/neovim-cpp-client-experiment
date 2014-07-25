@@ -213,10 +213,9 @@ struct NeoServer
 
   static const uint64_t REQUEST, RESPONSE, NOTIFY;
 
+  // TODO: std::future?
   template<typename T = std::vector<int>>
-  void request(uint64_t method, const T& t = T{});
-
-  msgpack::object get_response();
+  msgpack::object request(uint64_t method, const T& t = T{});
 
   msgpack::unpacker up;
 };
@@ -237,7 +236,7 @@ NeoServer::NeoServer()
 }
 
 template<typename T>
-void NeoServer::request(uint64_t method, const T& t)
+msgpack::object NeoServer::request(uint64_t method, const T& t)
 {
   msgpack::sbuffer sbuf;
 
@@ -248,10 +247,7 @@ void NeoServer::request(uint64_t method, const T& t)
                    << t;       // [args]
 
   sock.send(sbuf);
-}
 
-msgpack::object NeoServer::get_response()
-{
   up = sock.recv_msgpack();
 
   msgpack::unpacked res;
@@ -310,9 +306,7 @@ int main()
 
   std::cout << "Requesting API data..." << std::endl;
 
-  serv.request(0);
-
-  std::vector<msgpack::object> resultObj = serv.get_response().convert();
+  std::vector<msgpack::object> resultObj = serv.request(0).convert();
 
   std::string rawData = resultObj[1].convert();
 
@@ -349,8 +343,6 @@ int main()
   std::cout << "Enter the number of a function. " << std::endl;
   std::cin  >> n;
   
-  serv.request(n);
-
-  msgpack::object reply = serv.get_response().convert();
+  msgpack::object reply = serv.request(n);
   std::cout << "Got: " << reply << std::endl;
 }
