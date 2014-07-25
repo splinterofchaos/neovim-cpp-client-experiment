@@ -345,11 +345,12 @@ int main()
   for (NeoFunc& nf : serv.functions)
     std::cout << nf << '\n';
 
-  // TODO:
-  //
-  // int n;
-  // std::cout << "Enter the number of a function. " << std::endl;
-  // std::cin  >> n;
-  //
-  // serv.request(n, std::vector<int>{});
+  int n;
+  std::cout << "Enter the number of a function. " << std::endl;
+  std::cin  >> n;
+  
+  serv.request(n, std::vector<int>{});
+
+  msgpack::object reply = serv.get_response().convert();
+  std::cout << "Got: " << reply << std::endl;
 }
