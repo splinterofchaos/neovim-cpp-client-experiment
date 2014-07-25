@@ -6,6 +6,7 @@
 #include <iostream>
 #include <map>
 #include <utility>
+#include <tuple>
 
 #include <msgpack.hpp>
 //#include <uv.h> // TODO: Use libuv.
@@ -256,34 +257,24 @@ msgpack::object NeoServer::get_response()
   msgpack::unpacked res;
   up.next(&res);
 
-  msgpack::object replyObj = res.get();
+  using Reply = std::tuple<uint64_t,uint64_t,msgpack::object,msgpack::object>;
+  uint64_t msgType, resId; msgpack::object error, ret;
 
-  if (replyObj.type != msgpack::type::ARRAY) {
-    std::cerr << "Response must be an array." << std::endl;
-    exit(1);
-  }
+  Reply reply = res.get().convert();
 
-  msgpack::object_array replyArray = replyObj.via.array;
+  std::tie(msgType,resId,error,ret) = reply;
 
-  if (replyArray.size != 4) {
-    std::cerr << "Response array must have size of 4." << std::endl;
-    exit(1);
-  }
-
-  uint64_t msgType = replyArray.ptr[0].via.u64;
   if (msgType != RESPONSE) {
     std::cerr << "Message type must be 1 (response)." << std::endl;
     exit(1);
   }
 
-  uint64_t resId = replyArray.ptr[1].via.u64;
   if (resId != id-1) {
     std::cerr << "Wrong msg id: Expected " << id-1  ;
     std::cerr << ", got " << resId  << '.' << std::endl;
     exit(1);
   }
   
-  msgpack::object error = replyArray.ptr[2];
   if (!error.is_nil()) {
     std::cerr << "Msgpack error: " << error << std::endl;
     //exit(1);
@@ -292,7 +283,7 @@ msgpack::object NeoServer::get_response()
     return error;
   }
 
-  return replyArray.ptr[3];
+  return ret;
 }
 
 namespace std {
@@ -321,84 +312,44 @@ int main()
 
   serv.request(0, std::vector<int>{});
 
-  msgpack::object resultObj = serv.get_response();
+  std::vector<msgpack::object> resultObj = serv.get_response().convert();
 
-  std::cout << "Got data." << std::endl;
+  std::string rawData = resultObj[1].convert();
 
-  if (resultObj.type != msgpack::type::ARRAY) {
-    std::cerr << "result should be array" << std::endl;
-    exit(1);
-  }
-
-  msgpack::object finalObj = resultObj.via.array.ptr[1];
-  if (finalObj.type != msgpack::type::STR) {
-    std::cerr << "Unexpected object type (final)." << std::endl;
-    exit(1);
-  }
-
-  msgpack::object_str str = finalObj.via.str;
-
-  std::cout << "Data:\n" << finalObj << std::endl;
-
-  msgpack::unpacker upData(str.size + 1);
-  memcpy(upData.buffer(), str.ptr, str.size);
-  upData.buffer_consumed(str.size);
+  msgpack::unpacker upData(rawData.size());
+  std::copy(std::begin(rawData), std::end(rawData), upData.buffer());
+  upData.buffer_consumed(rawData.size());
 
   msgpack::unpacked res;
   upData.next(&res);
 
-  msgpack::object dataObj = res.get();
-  if (dataObj.type != msgpack::type::MAP) {
-    std::cerr << "Unexpected object type (data)." << std::endl;
-    std::cerr << "Actually: " << std::to_string(dataObj.type) << std::endl;
-    exit(1);
+  std::map<std::string, msgpack::object> servicesMap = res.get().convert();
+
+  servicesMap["classes"].convert(&serv.classes);
+
+  using Fn = std::map<std::string, msgpack::object>;
+  std::vector<Fn> fns = servicesMap["functions"].convert();
+
+  for (auto& fn : fns) {
+    NeoFunc nf;
+    fn["name"]       .convert(&nf.name);
+    fn["return_type"].convert(&nf.resultType);
+    nf.canFail = fn["can_fail"].via.boolean;
+    fn["id"]         .convert(&nf.id);
+    fn["parameters"] .convert(&nf.args);
+
+    std::cout << nf << std::endl;
+    serv.functions.emplace_back(std::move(nf));
   }
 
-  msgpack::object_map servicesMap = dataObj.via.map;
+  for (NeoFunc& nf : serv.functions)
+    std::cout << nf << '\n';
 
-  for (size_t i=0; i < servicesMap.size; i++) {
-    auto& kv = servicesMap.ptr[i];
-    std::string key = kv.key.convert();
-
-    if (key == "classes") {
-      std::cout << "classes: ";
-
-      kv.val.convert(&serv.classes);
-
-      for (std::string& cl : serv.classes)
-        std::cout << cl << ' ';
-      std::cout << std::endl;
-
-    } else if (key == "functions") {
-      std::cout << "functions:\n";
-
-      if (kv.val.type != msgpack::type::ARRAY)
-        exit(5);
-
-      msgpack::object_array fnArray = kv.val.via.array;
-
-      if (fnArray.size == 0) {
-        std::cerr << "No functions!" << std::endl;
-        exit(1);
-      }
-      using Fn = std::map<std::string, msgpack::object>;
-      std::vector<Fn> fns = kv.val.convert();
-
-      for (auto& fn : fns) {
-        NeoFunc nf;
-        fn["name"]       .convert(&nf.name);
-        fn["return_type"].convert(&nf.resultType);
-        nf.canFail = fn["can_fail"].via.boolean;
-        fn["id"]         .convert(&nf.id);
-        fn["parameters"] .convert(&nf.args);
-
-        std::cout << nf << std::endl;
-        serv.functions.emplace_back(std::move(nf));
-      }
-
-
-      for (NeoFunc& nf : serv.functions)
-        std::cout << nf << '\n';
-    }
-  }
+  // TODO:
+  //
+  // int n;
+  // std::cout << "Enter the number of a function. " << std::endl;
+  // std::cin  >> n;
+  //
+  // serv.request(n, std::vector<int>{});
 }
