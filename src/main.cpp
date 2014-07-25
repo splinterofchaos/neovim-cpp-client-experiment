@@ -1,21 +1,12 @@
 
-// TODO: Which of these do I really need?
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
+#include "Socket.h"
+
 #include <string>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <sys/un.h>  // unix sockaddr type.
 
 #include <iostream>
 #include <map>
 #include <utility>
 
-#include <msgpack.h>
 #include <msgpack.hpp>
 //#include <uv.h> // TODO: Use libuv.
 
@@ -37,12 +28,6 @@ void die_errno(const char* failedAt)
   // Just in case socket_error_msg() returns NULL, exit with errno so the user
   // can look up the code.
   exit(errno);
-}
-
-template<typename POD>
-void zero(POD& pod)
-{
-  bzero((char *) &pod, sizeof(pod));
 }
 
 std::string socket_error_msg()
@@ -160,83 +145,6 @@ std::string socket_error_msg()
     err = "ERROR: " + err + ".";
 
   return err;
-}
-
-struct UnixSocket
-{
-  int fd;
-
-  UnixSocket();
-  ~UnixSocket();
-
-  /// Connects to an arbitrary sockaddr type.
-  template<typename Addr>
-  bool connect_addr(const Addr& addr);
-
-  /// Connects to `path` using a unix address.
-  bool connect_local(const char *path);
-
-  int send(const char *buf, size_t len);
-  int send(const msgpack::sbuffer&);
-
-  std::string recv();
-  msgpack::unpacker recv_msgpack();
-};
-
-UnixSocket::UnixSocket() 
-{
-  fd = socket(AF_UNIX, SOCK_STREAM, 0);
-}
-
-UnixSocket::~UnixSocket()
-{
-  close(fd);
-}
-
-template<typename Addr>
-bool UnixSocket::connect_addr(const Addr& addr)
-{
-  return connect(fd, (sockaddr*)&addr, sizeof(addr)) >= 0;
-}
-
-bool UnixSocket::connect_local(const char *path)
-{
-  sockaddr_un addr;
-  zero(addr);
-  addr.sun_family = AF_UNIX;
-  strcpy(addr.sun_path, path);
-  return connect_addr(addr);
-}
-
-int UnixSocket::send(const char *buf, size_t len)
-{
-  return ::send(fd, (void*)buf, len, 0);
-}
-
-int UnixSocket::send(const msgpack::sbuffer& b)
-{
-  return send(b.data(), b.size());
-}
-
-// nvim can give extreme amounts of data in one burst. Be prepared.
-constexpr size_t MAX_SIZE = 2*1024*1024;
-
-// TODO: This is really inefficient when writing to a msgpack::unpacker.
-std::string UnixSocket::recv()
-{
-  char buf[MAX_SIZE];
-  size_t len = ::recv(fd, buf, MAX_SIZE, 0);
-  return std::string(buf, buf+len);
-}
-
-msgpack::unpacker UnixSocket::recv_msgpack()
-{
-  char buf[MAX_SIZE];
-  size_t len = ::recv(fd, buf, MAX_SIZE, 0);
-  msgpack::unpacker up(len);
-  std::copy( buf, buf+len, up.buffer() );
-  up.buffer_consumed(len);
-  return std::move(up);
 }
 
 bool ok(const UnixSocket& s)
@@ -430,7 +338,7 @@ int main()
 
   msgpack::object_str str = finalObj.via.str;
 
-  std::cout << "Data:\n" << str.ptr << std::endl;
+  std::cout << "Data:\n" << finalObj << std::endl;
 
   msgpack::unpacker upData(str.size + 1);
   memcpy(upData.buffer(), str.ptr, str.size);
