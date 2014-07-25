@@ -183,6 +183,33 @@ namespace std {
   }
 }
 
+// TODO: Very inefficient.
+std::vector<std::string> words(const std::string& words)
+{
+  std::vector<std::string> ws;
+
+  auto it = std::begin(words);
+
+  auto wordStart = it;
+
+  bool whiteDetected = true; 
+
+  for (; it != std::end(words); it++) {
+    if (*it == ' ') {
+      ws.emplace_back(wordStart, it);
+    } else if (whiteDetected) {
+      whiteDetected = false;
+      wordStart = it;
+    }
+  }
+
+  // Loop exited while reading a word.
+  if (!whiteDetected && it != wordStart)
+    ws.emplace_back(wordStart, it);
+
+  return std::move(ws);
+}
+
 int main()
 {
   NeoServer serv;
@@ -223,9 +250,23 @@ int main()
     std::cout << nf << '\n';
 
   int n;
-  std::cout << "Enter the number of a function. " << std::endl;
-  std::cin  >> n;
-  
-  msgpack::object reply = serv.request(n);
+  std::string line;
+  std::cout << " : " << std::endl;
+  std::getline(std::cin, line);
+
+  std::vector<std::string> ws = words(line);
+  if (!ws.size()) {
+    std::cerr << "No input.";
+    exit(1); // TODO: Loop
+  }
+  n = std::stoi(ws[0]);
+
+  std::vector<uint64_t> args;
+
+  // TODO: Handle String arguments.
+  for (auto it=std::begin(ws)+1; it != std::end(ws); it++)
+    args.push_back(std::stoi(*it));
+
+  msgpack::object reply = serv.request(n, args);
   std::cout << "Got: " << reply << std::endl;
 }
