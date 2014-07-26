@@ -264,24 +264,33 @@ int main()
   for (NeoFunc& nf : serv.functions)
     std::cout << nf << '\n';
 
-  int n;
-  std::string line;
-  std::cout << " : " << std::endl;
-  std::getline(std::cin, line);
+  while (true)
+  {
+    int n;
+    std::string line;
+    std::cout << " : ";
+    std::getline(std::cin, line);
 
-  std::vector<std::string> ws = words(line);
-  if (!ws.size()) {
-    std::cerr << "No input.";
-    exit(1); // TODO: Loop
+    if (line == "quit")
+      break;
+
+    std::vector<std::string> ws = words(line);
+    if (!ws.size()) {
+      std::cerr << "No input.";
+      exit(1); // TODO: Loop
+    }
+    n = std::stoi(ws[0]);
+
+    std::vector<msgpack::object> args;
+
+    for (auto it=std::begin(ws)+1; it != std::end(ws); it++) {
+      if (std::isdigit((*it)[0]))
+        args.emplace_back(std::stoi(*it));
+      else 
+        args.emplace_back(*it);
+    }
+
+    msgpack::object reply = serv.request(n, args);
+    std::cout << reply << std::endl;
   }
-  n = std::stoi(ws[0]);
-
-  std::vector<uint64_t> args;
-
-  // TODO: Handle String arguments.
-  for (auto it=std::begin(ws)+1; it != std::end(ws); it++)
-    args.push_back(std::stoi(*it));
-
-  msgpack::object reply = serv.request(n, args);
-  std::cout << "Got: " << reply << std::endl;
 }
