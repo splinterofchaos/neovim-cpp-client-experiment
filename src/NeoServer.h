@@ -36,6 +36,7 @@ struct NeoServer
   uint32_t id; ///< The id of the next message.
 
   UnixSocket sock;
+  std::string address;
 
   std::vector<std::string> classes;
   std::vector<NeoFunc>     functions;

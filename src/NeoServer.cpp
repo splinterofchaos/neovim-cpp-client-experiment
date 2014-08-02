@@ -1,4 +1,9 @@
 
+#include <cstdlib>   // getenv()
+#include <stdio.h>
+#include <unistd.h>  // fork()
+#include <fcntl.h>
+
 #include "NeoServer.h"
 
 std::ostream& operator<< (std::ostream& os, const NeoFunc::Param& p)
@@ -27,6 +32,23 @@ std::ostream& operator<< (std::ostream& os, const NeoFunc& nf)
   return os;
 }
 
+bool try_connect(NeoServer& serv)
+{
+  // Guess the server's address.
+  const char* laddr = getenv("NEOVIM_LISTEN_ADDRESS");
+  if (laddr && serv.sock.connect_local(laddr)) {
+    serv.address = laddr;
+    return true;
+  }
+  
+  if (serv.sock.connect_local("/tmp/novim")) {
+    serv.address = "/tmp/neovim";
+    return true;
+  }
+
+  return false;
+}
+
 NeoServer::NeoServer()
 {
   id = 0;
@@ -34,8 +56,32 @@ NeoServer::NeoServer()
   if (!sock)
     die_errno("Failed opening socket:\n");
 
-  if (!sock.connect_local("/tmp/neovim"))
-    die_errno("Failed connecting to server:\n");
+  if (!try_connect(*this)) {
+    std::cout << "No neovim instance detected. Attempting to create one." 
+              << std::endl;
+
+    // Before failing, let's assume neovim hasn't started yet.
+    pid_t pid = fork();
+    if (pid == -1)
+      die_errno("fork()");
+
+    if (pid == 0) {
+      std::cout << "Starting nvim" << std::endl;
+      execlp("xterm", "xterm", "-e", "nvim", (char *) NULL);
+      die_errno("running nvim");
+    }
+
+    std::cout << "Waiting for client to start..." << std::endl;
+    unsigned int t = 0;
+    while (!try_connect(*this)) { 
+      usleep(200);
+      // Call it quits after ten seconds.
+      if ((t += 200) > 10e9) {
+        std::cerr << "can't connect to server" << std::endl;
+        exit(1);
+      }
+    }
+  }
 
   // Request the API data.
   std::vector<msgpack::object> resultObj = request(0).convert();
