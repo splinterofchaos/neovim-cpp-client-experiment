@@ -100,6 +100,9 @@ struct NeoServer
   template<typename T = std::vector<int>>
   msgpack::object request(uint64_t method, const T& t = T{});
 
+  template<typename T = std::vector<int>>
+  msgpack::object request(const std::string& method, const T& t = T{});
+
   msgpack::unpacker up;
 };
 
@@ -204,6 +207,23 @@ msgpack::object NeoServer::request(uint64_t method, const T& t)
   }
 
   return ret;
+}
+
+template<typename T>
+msgpack::object NeoServer::request(const std::string& method, const T& t)
+{
+  uint64_t mid = 0;
+
+  for (const NeoFunc& nf : functions) {
+    if (nf.name == method) {
+      mid = nf.id;
+      break;
+    }
+  }
+
+  if (mid == 0)
+    throw std::runtime_error("function '" + method + "' not found");
+  return request(mid, t);
 }
 
 namespace std {
@@ -337,7 +357,12 @@ int main()
         args.emplace_back(*it);
     }
 
-    msgpack::object reply = serv.request(std::stoi(line), args);
+    msgpack::object reply;
+    if (std::isdigit(ws[0][0]))
+      reply = serv.request(std::stoi(ws[0]), args);
+    else
+      reply = serv.request(ws[0], args);
+
     std::cout << reply << std::endl;
   }
 }
