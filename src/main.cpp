@@ -195,34 +195,67 @@ namespace std {
   }
 }
 
-// TODO: Very inefficient.
-std::vector<std::string> words(const std::string& words)
+enum class WordsError { 
+  UNESCAPED_QUOTE, 
+  ENDS_WITH_ESCAPE,
+  OK
+};
+
+// TODO: std::string_view?
+template<typename StringIt, typename Inserter>
+WordsError words(StringIt it, StringIt end, Inserter inserter)
 {
-  std::vector<std::string> ws;
+  // To represent the parse state, store a predicate that defines how to
+  // delimit a "word", which may include whitespace if in quotes.
+  using Mode = bool(*)(char);
+  Mode mode = nullptr;
 
-  auto it = std::begin(words);
+  Mode non_white    = [](char c) {  return  !std::isspace(c);  };
+  Mode is_white     = [](char c) {  return !!std::isspace(c);  };
+  Mode single_quote = [](char c) {  return c == '\'';          };
+  Mode double_quote = [](char c) {  return c == '"';           };
 
-  auto wordStart = it;
+  // We also need to know if the parsed char should be escaped.
+  bool esc = false;
 
-  bool whiteDetected = true; 
+  for (; it != end; it++) {
+    // Skip whitespace.
+    it = std::find_if(it, end, non_white);
+    if (it == end)
+      break;
 
-  for (; it != std::end(words); it++) {
-    if (*it == ' ') {
-      if (whiteDetected)
-        continue;
-      ws.emplace_back(wordStart, it);
-      whiteDetected = true;
-    } else if (whiteDetected) {
-      whiteDetected = false;
-      wordStart = it;
+    if (single_quote(*it)) {
+      mode = single_quote;
+      it++;
+    } else if (double_quote(*it)) {
+      mode = double_quote;
+      it++;
+    } else {
+      mode = is_white;
     }
+
+    std::string s;
+    for (; it != end && (esc || !mode(*it)); it++) {
+      if (esc || *it != '\\') {
+        s.push_back(*it);
+        esc = false;
+      } else if (*it == '\\') {
+        esc = true;
+      }
+    }
+
+    // Check for errors, but add the new word first so the caller can see where
+    // it errored.
+    *(inserter++) = std::move(s);
+
+    if (esc)
+      return WordsError::ENDS_WITH_ESCAPE;
+
+    if (mode != is_white && it == end)
+      return WordsError::UNESCAPED_QUOTE;
   }
 
-  // Loop exited while reading a word.
-  if (!whiteDetected && it != wordStart)
-    ws.emplace_back(wordStart, it);
-
-  return std::move(ws);
+  return WordsError::OK;
 }
 
 int main()
@@ -266,20 +299,31 @@ int main()
 
   while (true)
   {
-    int n;
     std::string line;
     std::cout << " : ";
-    std::getline(std::cin, line);
+    if (!std::getline(std::cin, line))
+      break;
+
+    if (line.size() == 0)
+      continue;
 
     if (line == "quit")
       break;
 
-    std::vector<std::string> ws = words(line);
-    if (!ws.size()) {
-      std::cerr << "No input.";
-      exit(1); // TODO: Loop
+    std::vector<std::string> ws;
+    auto wordsError = words(std::begin(line), 
+                            std::end(line),
+                            std::back_inserter(ws));
+
+    switch (wordsError) {
+      case WordsError::UNESCAPED_QUOTE: 
+        std::cerr << "Quotation not escaped: \"" << ws.back() << std::endl;
+        continue;
+      case WordsError::ENDS_WITH_ESCAPE:
+        std::cerr << "Ends with escape: " << ws.back() << '\\' << std::endl;
+        continue;
+      default: break;  // Ok!
     }
-    n = std::stoi(ws[0]);
 
     std::vector<msgpack::object> args;
 
@@ -290,7 +334,7 @@ int main()
         args.emplace_back(*it);
     }
 
-    msgpack::object reply = serv.request(n, args);
+    msgpack::object reply = serv.request(std::stoi(line), args);
     std::cout << reply << std::endl;
   }
 }
