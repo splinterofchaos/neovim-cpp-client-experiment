@@ -353,6 +353,10 @@ int main()
     for (auto it=std::begin(ws)+1; it != std::end(ws); it++) {
       if (std::isdigit((*it)[0]))
         args.emplace_back(std::stoi(*it));
+      else if (*it == "true" || *it == "True" || *it == "TRUE")
+        args.emplace_back(true);
+      else if (*it == "false" || *it == "False" || *it == "FALSE")
+        args.emplace_back(false);
       else 
         args.emplace_back(*it);
     }
