@@ -78,6 +78,11 @@ msgpack::unpacker UnixSocket::recv_msgpack()
 }
 #endif
 
+UnixSocket::operator bool()
+{
+  return fd >= 0;
+}
+
 std::string socket_error_msg()
 {
 
@@ -194,3 +199,19 @@ std::string socket_error_msg()
 
   return err;
 }
+
+#include <iostream>
+void die_errno(const char* failedAt)
+{
+  // Make sure this isn't a false alarm.
+  if (errno == 0)
+    return;
+
+  std::cerr << "Error while " << failedAt << '\n';
+  std::cerr << socket_error_msg() << std::endl;
+
+  // Just in case socket_error_msg() returns NULL, exit with errno so the user
+  // can look up the code.
+  exit(errno);
+}
+

@@ -28,8 +28,11 @@ struct UnixSocket
   // msgpack 0.6 makes unpacker move-enabled.
   msgpack::unpacker recv_msgpack();
 #endif
+
+  operator bool();
 };
 
 /// Converts errno into a human-readable message.
 std::string socket_error_msg();
 
+void die_errno(const char* failedAt);

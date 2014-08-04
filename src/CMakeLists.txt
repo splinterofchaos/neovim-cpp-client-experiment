@@ -11,4 +11,5 @@ add_executable(cvim main.cpp)
 
 set(NEOVIM_CURSED_SOURCES Socket.cpp)
 add_library(Socket Socket.cpp)
-target_link_libraries(cvim ${MSGPACK_LIBRARIES} Socket)
+add_library(NeoServer NeoServer.cpp)
+target_link_libraries(cvim ${MSGPACK_LIBRARIES} Socket NeoServer)
