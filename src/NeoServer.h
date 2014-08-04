@@ -51,16 +51,18 @@ struct NeoServer
 
   // TODO: std::future?
   template<typename T = std::vector<int>>
-  msgpack::object request(uint64_t method, const T& t = T{});
+  void request(uint64_t method, const T& t = T{});
 
   template<typename T = std::vector<int>>
-  msgpack::object request(const std::string& method, const T& t = T{});
+  void request(const std::string& method, const T& t = T{});
+
+  msgpack::object receive();
 
   msgpack::unpacker up;
 };
 
 template<typename T>
-msgpack::object NeoServer::request(uint64_t method, const T& t)
+void NeoServer::request(uint64_t method, const T& t)
 {
   msgpack::sbuffer sbuf;
 
@@ -71,50 +73,10 @@ msgpack::object NeoServer::request(uint64_t method, const T& t)
                    << t;                 // [args]
 
   sock.send(sbuf);
-
-  sock.recv(up);
-
-  msgpack::unpacked res;
-  up.next(&res);
-
-  uint64_t msgType, resId; msgpack::object error, ret;
-
-  // This works on with the `poc/0.6` branch of msgpack-c:
-  /*
-   * using Reply = std::tuple<uint64_t,uint64_t,msgpack::object,msgpack::object>;
-   * std::tie(msgType,resId,error,ret) = res.get().convert();
-   */
-
-  std::vector<msgpack::object> reply = res.get().convert();
-  msgType = reply[0].convert();
-  resId   = reply[1].convert();
-  error   = reply[2];
-  ret     = reply[3];
-
-  if (msgType != RESPONSE) {
-    std::cerr << "Message type must be 1 (response)." << std::endl;
-    exit(1);
-  }
-
-  if (resId != id-1) {
-    std::cerr << "Wrong msg id: Expected " << id-1  ;
-    std::cerr << ", got " << resId  << '.' << std::endl;
-    exit(1);
-  }
-
-  if (!error.is_nil()) {
-    std::cerr << "Msgpack error: " << error << std::endl;
-    //exit(1);
-    // Probably better to just return this error since the user already expects
-    // a msgpack::object.
-    return error;
-  }
-
-  return ret;
 }
 
 template<typename T>
-msgpack::object NeoServer::request(const std::string& method, const T& t)
+void NeoServer::request(const std::string& method, const T& t)
 {
   uint64_t mid = 0;
 
@@ -127,6 +89,6 @@ msgpack::object NeoServer::request(const std::string& method, const T& t)
 
   if (mid == 0)
     throw std::runtime_error("function '" + method + "' not found");
-  return request(mid, t);
+  request(mid, t);
 }
 

@@ -9,6 +9,9 @@
 #include <utility>
 #include <tuple>
 
+#include <unistd.h>  // fork()
+#include <signal.h>  // kill()/SIGKILL
+
 #include <msgpack.hpp>
 //#include <uv.h> // TODO: Use libuv.
 
@@ -102,6 +105,38 @@ WordsError words(StringIt it, StringIt end, Inserter inserter)
   return WordsError::OK;
 }
 
+/// Provides RAII for a connection that asynchronously listens to the server.
+struct Listener
+{
+  NeoServer& serv;
+  pid_t pid;
+
+  Listener(NeoServer& serv) : serv(serv)
+  {
+    pid = fork();
+    if (pid == -1)
+      die_errno("starting listener");
+    else if (pid == 0)
+      listen();
+  }
+
+  ~Listener()
+  {
+    if (pid > 0)
+      kill(pid, SIGKILL);
+  }
+
+private:
+  void listen()
+  {
+    // FIXME: For now, just print replies to the screen as fast as they come.
+    while (true) {
+      msgpack::object o = serv.receive();
+      std::cout << o << std::endl;
+    }
+  }
+};
+
 int main()
 {
   NeoServer serv;
@@ -109,6 +144,8 @@ int main()
   std::cout << "API:" << std::endl;
   for (NeoFunc& nf : serv.functions)
     std::cout << nf << '\n';
+
+  Listener listener(serv);
 
   while (true)
   {
@@ -151,12 +188,10 @@ int main()
         args.emplace_back(*it);
     }
 
-    msgpack::object reply;
+    // Send the request. `Listener` will read the response.
     if (std::isdigit(ws[0][0]))
-      reply = serv.request(std::stoi(ws[0]), args);
+      serv.request(std::stoi(ws[0]), args);
     else
-      reply = serv.request(ws[0], args);
-
-    std::cout << reply << std::endl;
+      serv.request(ws[0], args);
   }
 }
