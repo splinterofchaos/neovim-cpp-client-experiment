@@ -124,6 +124,17 @@ int main()
 
   while (true)
   {
+    if (server->notifications.size()) { 
+      std::cout << "Notifications:\n";
+      do {
+        NeoServer::Note note = server->notifications.front();
+        server->notifications.pop_front();
+
+        std::cout << std::get<0>(note) << ": ";
+        std::cout << std::get<1>(note) << '\n';
+      } while (server->notifications.size());
+    }
+
     std::string line;
     std::cout << " : ";
     if (!std::getline(std::cin, line))

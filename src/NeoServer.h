@@ -37,10 +37,10 @@ std::ostream& operator<< (std::ostream& os, const NeoFunc& nf);
 /// Manages the state of a connection to a running instance of nvim.
 struct NeoServer
 {
-  /// The type of an RPC method.
-  using Method = std::function<void(msgpack::object)>;
+  /// The data of a NOTIFY message.
+  using Note = std::pair<std::string, msgpack::object>;
 
-  /// The type returned by a request.
+  /// The type returned by request().
   using Reply = std::pair<uint64_t, msgpack::object>;
 
   uint32_t id; ///< The id of the next message.
@@ -51,18 +51,11 @@ struct NeoServer
   std::vector<std::string> classes;
   std::vector<NeoFunc>     functions;
 
-  std::map<std::string, Method> methods;
-
-  std::list<NeoServer::Reply> replies;
+  std::list<Reply> replies;
+  std::list<Note>  notifications;
 
   NeoServer();
   ~NeoServer();
-
-  template<typename F>
-  void register_method(const std::string& name, F&& f)
-  {
-    methods[name] = std::forward<F>(f);
-  }
 
   enum {
     REQUEST  = 0,

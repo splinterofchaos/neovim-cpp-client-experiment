@@ -148,7 +148,6 @@ void *NeoServer::listen(void *pthis)
 {
   NeoServer& self = *reinterpret_cast<NeoServer*>(pthis);
   while (self.sock.recv(self.up)) {
-
     msgpack::unpacked un;
     self.up.next(&un);
 
@@ -157,27 +156,18 @@ void *NeoServer::listen(void *pthis)
     size_t len = reply_ar.size;
     
     // The first field must be the message type; either RESPONSE or NOTIFY.
-    if (reply(0) == RESPONSE && len == 4)
-    {
+    if (reply(0) == RESPONSE && len == 4) {
       // A msgpack response is either: 
       //    (RESPONSE, id,   nil, ret)
       // or (RESPONSE, id, error, nil)
       uint64_t rid = reply(1).convert();
       msgpack::object val = reply( reply(2).is_nil() ? 3 : 2 );
       self.replies.emplace_back(rid, val);
-    }
-    else if (reply(0) == NOTIFY && len == 3)
-    {
+    } else if (reply(0) == NOTIFY && len == 3) {
       // A msgpack notification looks like: (NOTIFY, name, args)
-      auto mthd = self.methods.find(reply(1).convert());
-      if (mthd != std::end(self.methods)) {
-        (mthd->second)(reply(2));
-      } else {
-        std::cerr << "Unhandled notification: " << reply(1) << ' ' << reply(2);
-      }
-    }
-    else
-    {
+      self.notifications.emplace_back(reply(1).as<std::string>(), 
+                                      reply(2));
+    } else {
       std::cerr << "Unknown message type (" << reply(0).via.u64 << ")\n";
     }
   }
