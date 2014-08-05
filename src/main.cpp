@@ -122,8 +122,15 @@ int main()
   for (NeoFunc& nf : server->functions)
     std::cout << nf << '\n';
 
+  Buffer currentBuf(*server);
+
+
   while (true)
   {
+    if (currentBuf.pid.available)
+      std::cout << "current buffer id: " 
+                << currentBuf.pid.get() << std::endl;
+
     if (server->notifications.size()) { 
       std::cout << "Notifications:\n";
       do {

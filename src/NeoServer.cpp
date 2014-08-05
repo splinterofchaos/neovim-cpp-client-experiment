@@ -200,4 +200,22 @@ void *NeoServer::listen(void *pthis)
 
   return nullptr;
 }
-  
+
+VimObject::VimObject(NeoServer& s) 
+  : serv(s)
+{
+}
+
+VimObject::~VimObject()
+{
+}
+
+Buffer::Buffer(NeoServer& s) 
+  : VimObject(s), pid(s, serv.request("vim_get_current_buffer"))
+{
+}
+
+uint64_t Buffer::id()
+{
+  return pid.get();
+}

@@ -112,15 +112,6 @@ private:
 /// Global instance of the neovim server.
 extern NeoServer *server;
 
-/// A virtual neovim buffer.
-struct Buffer
-{
-  uint64_t id;
-
-  /// Obtains the current buffer.
-  Buffer();
-};
-
 template<typename T>
 uint64_t NeoServer::request(uint64_t method, const T& t)
 {
@@ -155,3 +146,54 @@ uint64_t NeoServer::request(const std::string& method, const T& t)
   return request(mid, t);
 }
 
+struct VimObject
+{
+  NeoServer& serv;
+  VimObject(NeoServer&);
+  ~VimObject();
+};
+
+template<typename X>
+struct Promise : VimObject
+{
+  uint64_t id;
+  bool available;  ///< True if thread already joined.
+
+  Promise(NeoServer& s, uint64_t id) : VimObject(s), available(false)
+  {
+    if (pthread_create(&getter, nullptr, run, this) != 0)
+      throw std::runtime_error("could not start promise thread");
+  }
+
+  X& get()
+  {
+    pthread_join(getter, nullptr);
+    return x;
+  }
+
+private:
+  static void *run(void *vp)
+  {
+    Promise &self = *reinterpret_cast<Promise*>(vp);
+    new (&self.x) X(self.serv.grab(self.id).convert());
+    self.available = true;
+    return nullptr;
+  }
+
+  union { X x; int _; };
+  pthread_t getter;
+};
+
+/// A virtual neovim buffer.
+struct Buffer : public VimObject
+{
+  Promise<uint64_t> pid;
+
+  /// Obtains the current buffer.
+  Buffer(NeoServer&);
+
+  uint64_t id();
+
+  /// Gets the contents.
+  //std::vector<std::string> contents();
+};
