@@ -11,6 +11,7 @@
 
 #include <unistd.h>  // fork()
 #include <signal.h>  // kill()/SIGKILL
+#include <pthread.h>
 
 #include <msgpack.hpp>
 //#include <uv.h> // TODO: Use libuv.
@@ -105,40 +106,46 @@ WordsError words(StringIt it, StringIt end, Inserter inserter)
   return WordsError::OK;
 }
 
+
 /// Provides RAII for a connection that asynchronously listens to the server.
 struct Listener
 {
-  NeoServer& serv;
-  pid_t pid;
+  pthread_t worker;
 
-  Listener(NeoServer& serv) : serv(serv)
+  Listener(NeoServer& serv)
   {
-    pid = fork();
-    if (pid == -1)
-      die_errno("starting listener");
-    else if (pid == 0)
-      listen();
+    pserv = &serv;
+    keepGoing = true;
+    if (pthread_create(&worker, nullptr, listen, nullptr) != 0)
+      die_errno("spawning listener with pthread_create()");
   }
 
   ~Listener()
   {
-    if (pid > 0)
-      kill(pid, SIGKILL);
+    keepGoing = false;
+    pthread_cancel(worker);
   }
 
 private:
-  void listen()
+  static bool keepGoing;
+  static NeoServer* pserv;
+
+  static void *listen(void *)
   {
     // FIXME: For now, just print replies to the screen as fast as they come.
-    while (true) {
+    while (keepGoing) {
       uint64_t mid;
       msgpack::object o;
-      std::tie(mid, o) = serv.receive();
+      std::tie(mid, o) = pserv->receive();
       std::cout << "\n[" << mid << "]: ";
       std::cout << o << std::endl;
     }
+
+    return nullptr;
   }
 };
+bool Listener::keepGoing = true;
+NeoServer* Listener::pserv = nullptr;
 
 int main()
 {
@@ -196,7 +203,5 @@ int main()
       serv.request(std::stoi(ws[0]), args);
     else
       serv.request(ws[0], args);
-
-    usleep(0);  // Let the server catch up.
   }
 }
