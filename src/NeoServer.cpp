@@ -85,7 +85,9 @@ NeoServer::NeoServer()
 
   // Request the API data.
   request(0);
-  std::vector<msgpack::object> resultObj = receive().convert();
+  std::pair<uint64_t, msgpack::object> res = receive();
+  id = std::get<0>(res);
+  std::vector<msgpack::object> resultObj = std::get<1>(res).convert();
 
   // resultObj[0] holds the response ID (I think), but we don't need it as
   // things are currently written.
@@ -119,44 +121,46 @@ NeoServer::NeoServer()
   }
 }
 
-msgpack::object NeoServer::receive()
+std::pair<uint64_t, msgpack::object> NeoServer::receive()
 {
   sock.recv(up);
 
   msgpack::unpacked res;
   up.next(&res);
 
-  uint64_t msgType, resId; msgpack::object error, ret;
 
   // This works on with the `poc/0.6` branch of msgpack-c:
-  /*
+  /* 
+   * uint64_t msgType, resId; msgpack::object error, ret;
    * using Reply = std::tuple<uint64_t,uint64_t,msgpack::object,msgpack::object>;
    * std::tie(msgType,resId,error,ret) = res.get().convert();
    */
 
   std::vector<msgpack::object> reply = res.get().convert();
-  msgType = reply[0].convert();
-  resId   = reply[1].convert();
-  error   = reply[2];
-  ret     = reply[3];
 
-  if (msgType != RESPONSE) {
-    std::cerr << "Message type must be 1 (response)." << std::endl;
-    exit(1);
-  }
+  std::pair<uint64_t, msgpack::object> ret;
 
-  if (resId != id-1) {
-    std::cerr << "Wrong msg id: Expected " << id-1  ;
-    std::cerr << ", got " << resId  << '.' << std::endl;
-    exit(1);
-  }
+  // The first field must be the message type; either RESPONSE or NOTIFY.
+  if (reply[0] == RESPONSE) {
+    // A msgpack response looks like this: [RESPONSE, message id, error, ret]
+    std::get<0>(ret) = reply[1].convert();
 
-  if (!error.is_nil()) {
-    std::cerr << "Msgpack error: " << error << std::endl;
-    //exit(1);
-    // Probably better to just return this error since the user already expects
-    // a msgpack::object.
-    return error;
+    // If the error is set, ret will be nil.
+    if (!reply[2].is_nil())
+      std::get<1>(ret) = reply[2];
+    else
+      std::get<1>(ret) = reply[3];
+  } else if (reply[0] == NOTIFY) {
+    // A msgpack notification looks like: [NOTIFY, name, args]
+    auto mthd = methods.find(reply[1].convert());
+    if (mthd != std::end(methods)) {
+      (mthd->second)(reply[2]);
+    } else {
+      // FIXME:
+      std::cout << "Notified: " << reply[1] << ' ' << reply[2];
+    }
+
+    ret = receive();
   }
 
   return ret;

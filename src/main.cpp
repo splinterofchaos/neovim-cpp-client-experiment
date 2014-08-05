@@ -131,7 +131,10 @@ private:
   {
     // FIXME: For now, just print replies to the screen as fast as they come.
     while (true) {
-      msgpack::object o = serv.receive();
+      uint64_t mid;
+      msgpack::object o;
+      std::tie(mid, o) = serv.receive();
+      std::cout << "\n[" << mid << "]: ";
       std::cout << o << std::endl;
     }
   }
@@ -193,5 +196,7 @@ int main()
       serv.request(std::stoi(ws[0]), args);
     else
       serv.request(ws[0], args);
+
+    usleep(0);  // Let the server catch up.
   }
 }

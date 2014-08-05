@@ -41,7 +41,16 @@ struct NeoServer
   std::vector<std::string> classes;
   std::vector<NeoFunc>     functions;
 
+  using Method = std::function<void(msgpack::object)>;
+  std::map<std::string, Method> methods;
+
   NeoServer();
+
+  template<typename F>
+  void register_method(const std::string& name, F&& f)
+  {
+    methods[name] = std::forward<F>(f);
+  }
 
   enum {
     REQUEST  = 0,
@@ -56,7 +65,7 @@ struct NeoServer
   template<typename T = std::vector<int>>
   void request(const std::string& method, const T& t = T{});
 
-  msgpack::object receive();
+  std::pair<uint64_t, msgpack::object> receive();
 
   msgpack::unpacker up;
 };
