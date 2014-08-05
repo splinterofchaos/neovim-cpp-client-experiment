@@ -32,6 +32,16 @@ std::ostream& operator<< (std::ostream& os, const NeoFunc& nf)
   return os;
 }
 
+ScopedLock::ScopedLock(pthread_mutex_t& ref) : m(&ref)
+{
+  pthread_mutex_lock(m);
+}
+
+ScopedLock::~ScopedLock()
+{
+  pthread_mutex_unlock(m);
+}
+
 bool try_connect(NeoServer& serv)
 {
   // Guess the server's address.
@@ -85,7 +95,9 @@ NeoServer::NeoServer()
     }
   }
 
-  // We're all set up! Ready to read from the server continuously.
+  // Start the thread to read from the server.
+  repliesLock      = PTHREAD_MUTEX_INITIALIZER;
+  newReply         = PTHREAD_COND_INITIALIZER;
   if (pthread_create(&worker, nullptr, listen, this) != 0)
     die_errno("spawning listener with pthread_create()");
 
@@ -125,23 +137,32 @@ NeoServer::NeoServer()
 
 NeoServer::~NeoServer()
 {
+  pthread_cond_destroy(&newReply);
   pthread_cancel(worker);
+}
+
+std::vector<NeoServer::Reply> NeoServer::pending()
+{
+  return std::vector<NeoServer::Reply>(std::begin(replies), std::end(replies));
 }
 
 msgpack::object NeoServer::grab(uint64_t mid)
 {
   msgpack::object o;
-  for (auto& rep : replies) {
-    if (std::get<0>(rep) == mid) {
-      msgpack::object o = std::get<1>(rep);
-      replies.remove(rep);  // TODO: remove()/erase()
-      return o;
-    }
-  }
 
-  // It probably hasn't been added yet.
-  usleep(100);
-  return grab(mid);
+  ScopedLock l(repliesLock);
+  while (true) {
+    for (auto& rep : replies) {
+      if (std::get<0>(rep) == mid) {
+        msgpack::object o = std::get<1>(rep);
+        replies.remove(rep);  // TODO: remove()/erase()
+        return o;
+      }
+    }
+
+    // It probably hasn't been added yet.
+    pthread_cond_wait(&newReply, &repliesLock);
+  }
 }
 
 void *NeoServer::listen(void *pthis)
@@ -161,7 +182,10 @@ void *NeoServer::listen(void *pthis)
         // or (RESPONSE, id, error, nil)
         uint64_t rid = reply(1).convert();
         msgpack::object val = reply( reply(2).is_nil() ? 3 : 2 );
+
+        ScopedLock l(self.repliesLock);
         self.replies.emplace_back(rid, val);
+        pthread_cond_signal(&self.newReply);  // Signal grab() to try again.
       } else if (reply(0) == NOTIFY && len == 3) {
         // A msgpack notification looks like: (NOTIFY, name, args)
         self.notifications.emplace_back(reply(1).as<std::string>(), 

@@ -34,7 +34,25 @@ struct NeoFunc
 std::ostream& operator<< (std::ostream&, const NeoFunc::Param&);
 std::ostream& operator<< (std::ostream& os, const NeoFunc& nf);
 
+struct ScopedLock
+{
+  pthread_mutex_t* m;
+  ScopedLock(pthread_mutex_t&);
+  ~ScopedLock();
+};
+
 /// Manages the state of a connection to a running instance of nvim.
+///
+/// The constructor makes a connection to vim and spawns a thread to listen for
+/// responses. It fills `classes` and `functions` by downloading the API data
+/// from the running vim instance.
+///
+/// request(id,args) sends data to vim and returns the message id, which can be
+/// sent to grab() to obtain the response. Since a message may be missed or
+/// come out of order, it may be desirable to run it in another thread.
+///
+/// @remark Assumes neovim server is at /tmp/neovim, or checks
+///         $NEOVIM_LISTEN_ADDRESS.
 struct NeoServer
 {
   /// The data of a NOTIFY message.
@@ -51,7 +69,6 @@ struct NeoServer
   std::vector<std::string> classes;
   std::vector<NeoFunc>     functions;
 
-  std::list<Reply> replies;
   std::list<Note>  notifications;
 
   NeoServer();
@@ -63,7 +80,9 @@ struct NeoServer
     NOTIFY   = 2
   };
 
-  // TODO: std::future?
+  /// Returns a copy of all pending messages.
+  std::vector<Reply> pending();
+
   /// Requests the value of method(t) from the server by id.
   /// @return The id to expect a response with.
   template<typename T = std::vector<int>>
@@ -77,13 +96,17 @@ struct NeoServer
   /// Pull a specific reply from `replies`.
   msgpack::object grab(uint64_t);
 
-  msgpack::unpacker up;
-
 private:
   /// Ran in a separate thread, reads continuously from the server and updates
   /// the replies list.
   static void *listen(void *);
-  pthread_t worker;  ///< used by `listen`
+  pthread_t worker;             ///< runs `listen()`
+  std::list<Reply> replies;     ///< Replies waiting to get grab()ed.
+  pthread_mutex_t repliesLock;  ///< New reply from vim available.
+  pthread_cond_t newReply;      ///< New reply from vim available.
+
+
+  msgpack::unpacker up;  ///< Storage for msgpack objects. Used by `listen()`.
 };
 
 /// Global instance of the neovim server.

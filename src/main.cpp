@@ -147,7 +147,7 @@ int main()
       break;
 
     if (line == "?pending") {
-      for (const auto& rep : server->replies)
+      for (const auto& rep : server->pending())
         cout_reply(rep);
       continue;
     }
@@ -180,12 +180,12 @@ int main()
         args.emplace_back(*it);
     }
 
-    uint64_t id = server->id;
+    uint64_t id;
 
     if (std::isdigit(ws[0][0]))
-      server->request(std::stoi(ws[0]), args);
+      id = server->request(std::stoi(ws[0]), args);
     else
-      server->request(ws[0], args);
+      id = server->request(ws[0], args);
 
     std::cout << server->grab(id) << std::endl;
   }
