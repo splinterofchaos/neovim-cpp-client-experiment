@@ -49,6 +49,8 @@ bool try_connect(NeoServer& serv)
   return false;
 }
 
+NeoServer *server = nullptr;
+
 NeoServer::NeoServer()
 {
   id = 0;

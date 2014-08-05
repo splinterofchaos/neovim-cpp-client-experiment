@@ -7,6 +7,10 @@
 
 #include "Socket.h"
 
+struct NeoFunc;
+struct NeoServer;
+struct Buffer;
+
 struct NeoFunc
 {
   struct Param
@@ -74,6 +78,9 @@ struct NeoServer
 
   msgpack::unpacker up;
 };
+
+/// Global instance of the neovim server.
+extern NeoServer *server;
 
 template<typename T>
 void NeoServer::request(uint64_t method, const T& t)

@@ -120,9 +120,8 @@ struct Listener
 
   static std::list<NeoServer::Reply> replies;
 
-  Listener(NeoServer& serv)
+  Listener()
   {
-    pserv = &serv;
     keepGoing = true;
     if (pthread_create(&worker, nullptr, listen, nullptr) != 0)
       die_errno("spawning listener with pthread_create()");
@@ -131,7 +130,7 @@ struct Listener
   msgpack::object grab(uint64_t mid)
   {
     msgpack::object o;
-    uint64_t maxid = pserv->id;
+    uint64_t maxid = server->id;
     for (auto& rep : replies) {
       maxid = std::max(std::get<0>(rep), maxid);
       if (std::get<0>(rep) == mid) {
@@ -154,30 +153,29 @@ struct Listener
 
 private:
   static bool keepGoing;
-  static NeoServer* pserv;
 
   static void *listen(void *)
   {
     // FIXME: For now, just print replies to the screen as fast as they come.
     while (keepGoing)
-      replies.emplace_back(pserv->receive());
+      replies.emplace_back(server->receive());
 
     return nullptr;
   }
 };
 bool Listener::keepGoing = true;
-NeoServer* Listener::pserv = nullptr;
 std::list<NeoServer::Reply> Listener::replies;
 
 int main()
 {
   NeoServer serv;
+  server = &serv;
 
   std::cout << "API:" << std::endl;
-  for (NeoFunc& nf : serv.functions)
+  for (NeoFunc& nf : server->functions)
     std::cout << nf << '\n';
 
-  Listener listener(serv);
+  Listener listener;
 
   while (true)
   {
@@ -226,12 +224,12 @@ int main()
         args.emplace_back(*it);
     }
 
-    uint64_t id = serv.id;
+    uint64_t id = server->id;
 
     if (std::isdigit(ws[0][0]))
-      serv.request(std::stoi(ws[0]), args);
+      server->request(std::stoi(ws[0]), args);
     else
-      serv.request(ws[0], args);
+      server->request(ws[0], args);
 
     std::cout << listener.grab(id) << std::endl;
   }
