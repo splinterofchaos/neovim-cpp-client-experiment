@@ -85,19 +85,19 @@ NeoServer::NeoServer()
     }
   }
 
-  // Request the API data.
-  request(0);
-  Reply res = receive();
-  id = std::get<0>(res);
-  std::vector<msgpack::object> resultObj = std::get<1>(res).convert();
+  // We're all set up! Ready to read from the server continuously.
+  if (pthread_create(&worker, nullptr, listen, this) != 0)
+    die_errno("spawning listener with pthread_create()");
 
-  // resultObj[0] holds the response ID (I think), but we don't need it as
-  // things are currently written.
+  std::cout << "Requesting API data...\n";
+  Reply res = grab(request(0)).convert();
+
+  std::cout << '#' << std::get<0>(res) << '\n';
 
 #if MSGPACK_VERSION_MINOR >= 6
-  msgpack::object_str raw = resultObj[1].via.str;
+  msgpack::object_str raw = std::get<1>(res).via.str;
 #else
-  msgpack::object_raw raw = resultObj[1].via.raw;
+  msgpack::object_raw raw = std::get<1>(res).via.raw;
 #endif
 
   msgpack::unpacked up;
@@ -123,48 +123,66 @@ NeoServer::NeoServer()
   }
 }
 
-NeoServer::Reply NeoServer::receive()
+NeoServer::~NeoServer()
 {
-  sock.recv(up);
-
-  msgpack::unpacked res;
-  up.next(&res);
-
-
-  // This works on with the `poc/0.6` branch of msgpack-c:
-  /* 
-   * uint64_t msgType, resId; msgpack::object error, ret;
-   * using Reply = std::tuple<uint64_t,uint64_t,msgpack::object,msgpack::object>;
-   * std::tie(msgType,resId,error,ret) = res.get().convert();
-   */
-
-  std::vector<msgpack::object> reply = res.get().convert();
-
-  Reply ret;
-
-  // The first field must be the message type; either RESPONSE or NOTIFY.
-  if (reply[0] == RESPONSE) {
-    // A msgpack response looks like this: [RESPONSE, message id, error, ret]
-    std::get<0>(ret) = reply[1].convert();
-
-    // If the error is set, ret will be nil.
-    if (!reply[2].is_nil())
-      std::get<1>(ret) = reply[2];
-    else
-      std::get<1>(ret) = reply[3];
-  } else if (reply[0] == NOTIFY) {
-    // A msgpack notification looks like: [NOTIFY, name, args]
-    auto mthd = methods.find(reply[1].convert());
-    if (mthd != std::end(methods)) {
-      (mthd->second)(reply[2]);
-    } else {
-      // FIXME:
-      std::cout << "Notified: " << reply[1] << ' ' << reply[2];
-    }
-
-    ret = receive();
-  }
-
-  return ret;
+  pthread_cancel(worker);
 }
 
+msgpack::object NeoServer::grab(uint64_t mid)
+{
+  msgpack::object o;
+  for (auto& rep : replies) {
+    if (std::get<0>(rep) == mid) {
+      msgpack::object o = std::get<1>(rep);
+      replies.remove(rep);  // TODO: remove()/erase()
+      return o;
+    }
+  }
+
+  // It probably hasn't been added yet.
+  usleep(100);
+  return grab(mid);
+}
+
+void *NeoServer::listen(void *pthis)
+{
+  NeoServer& self = *reinterpret_cast<NeoServer*>(pthis);
+  while (true) {
+    self.sock.recv(self.up);
+
+    msgpack::unpacked un;
+    self.up.next(&un);
+
+    msgpack::object_array reply_ar = un.get().via.array;
+    auto reply = [&](size_t i) { return reply_ar.ptr[i]; };
+    size_t len = reply_ar.size;
+    
+    // The first field must be the message type; either RESPONSE or NOTIFY.
+    if (reply(0) == RESPONSE && len == 4)
+    {
+      // A msgpack response is either: 
+      //    (RESPONSE, id,   nil, ret)
+      // or (RESPONSE, id, error, nil)
+      uint64_t rid = reply(1).convert();
+      msgpack::object val = reply( reply(2).is_nil() ? 3 : 2 );
+      self.replies.emplace_back(rid, val);
+    }
+    else if (reply(0) == NOTIFY && len == 3)
+    {
+      // A msgpack notification looks like: (NOTIFY, name, args)
+      auto mthd = self.methods.find(reply(1).convert());
+      if (mthd != std::end(self.methods)) {
+        (mthd->second)(reply(2));
+      } else {
+        std::cerr << "Unhandled notification: " << reply(1) << ' ' << reply(2);
+      }
+    }
+    else
+    {
+      std::cerr << "Unknown message type (" << reply(0).via.u64 << ")\n";
+    }
+  }
+
+  return nullptr;
+}
+  

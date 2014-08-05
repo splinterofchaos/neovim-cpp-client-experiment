@@ -113,59 +113,6 @@ void cout_reply(const NeoServer::Reply& reply)
   std::cout << std::get<1>(reply) << std::endl;
 }
 
-/// Provides RAII for a connection that asynchronously listens to the server.
-struct Listener
-{
-  pthread_t worker;
-
-  static std::list<NeoServer::Reply> replies;
-
-  Listener()
-  {
-    keepGoing = true;
-    if (pthread_create(&worker, nullptr, listen, nullptr) != 0)
-      die_errno("spawning listener with pthread_create()");
-  }
-
-  msgpack::object grab(uint64_t mid)
-  {
-    msgpack::object o;
-    uint64_t maxid = server->id;
-    for (auto& rep : replies) {
-      maxid = std::max(std::get<0>(rep), maxid);
-      if (std::get<0>(rep) == mid) {
-        msgpack::object o = std::get<1>(rep);
-        replies.remove(rep);
-        return o;
-      }
-    }
-
-    // It probably hasn't been added yet.
-    usleep(100);
-    return grab(mid);
-  }
-
-  ~Listener()
-  {
-    keepGoing = false;
-    pthread_cancel(worker);
-  }
-
-private:
-  static bool keepGoing;
-
-  static void *listen(void *)
-  {
-    // FIXME: For now, just print replies to the screen as fast as they come.
-    while (keepGoing)
-      replies.emplace_back(server->receive());
-
-    return nullptr;
-  }
-};
-bool Listener::keepGoing = true;
-std::list<NeoServer::Reply> Listener::replies;
-
 int main()
 {
   NeoServer serv;
@@ -174,8 +121,6 @@ int main()
   std::cout << "API:" << std::endl;
   for (NeoFunc& nf : server->functions)
     std::cout << nf << '\n';
-
-  Listener listener;
 
   while (true)
   {
@@ -191,7 +136,7 @@ int main()
       break;
 
     if (line == "?pending") {
-      for (const auto& rep : Listener::replies)
+      for (const auto& rep : server->replies)
         cout_reply(rep);
       continue;
     }
@@ -231,6 +176,6 @@ int main()
     else
       server->request(ws[0], args);
 
-    std::cout << listener.grab(id) << std::endl;
+    std::cout << server->grab(id) << std::endl;
   }
 }

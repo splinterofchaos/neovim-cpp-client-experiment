@@ -53,7 +53,10 @@ struct NeoServer
 
   std::map<std::string, Method> methods;
 
+  std::list<NeoServer::Reply> replies;
+
   NeoServer();
+  ~NeoServer();
 
   template<typename F>
   void register_method(const std::string& name, F&& f)
@@ -68,36 +71,58 @@ struct NeoServer
   };
 
   // TODO: std::future?
+  /// Requests the value of method(t) from the server by id.
+  /// @return The id to expect a response with.
   template<typename T = std::vector<int>>
-  void request(uint64_t method, const T& t = T{});
+  uint64_t request(uint64_t, const T& t = T{});
 
+  /// Requests the value of method(t) from the server by name.
+  /// @return The id to expect a response with.
   template<typename T = std::vector<int>>
-  void request(const std::string& method, const T& t = T{});
+  uint64_t request(const std::string&, const T& t = T{});
 
-  Reply receive();
+  /// Pull a specific reply from `replies`.
+  msgpack::object grab(uint64_t);
 
   msgpack::unpacker up;
+
+private:
+  /// Ran in a separate thread, reads continuously from the server and updates
+  /// the replies list.
+  static void *listen(void *);
+  pthread_t worker;  ///< used by `listen`
 };
 
 /// Global instance of the neovim server.
 extern NeoServer *server;
 
+/// A virtual neovim buffer.
+struct Buffer
+{
+  uint64_t id;
+
+  /// Obtains the current buffer.
+  Buffer();
+};
+
 template<typename T>
-void NeoServer::request(uint64_t method, const T& t)
+uint64_t NeoServer::request(uint64_t method, const T& t)
 {
   msgpack::sbuffer sbuf;
 
   msgpack::packer<msgpack::sbuffer> pk(&sbuf);
   pk.pack_array(4) << (uint64_t)REQUEST  // type
-                   << id++               // msg id
+                   << id                 // msg id
                    << method             // method
                    << t;                 // [args]
 
   sock.send(sbuf);
+
+  return id++;
 }
 
 template<typename T>
-void NeoServer::request(const std::string& method, const T& t)
+uint64_t NeoServer::request(const std::string& method, const T& t)
 {
   uint64_t mid = 0;
 
@@ -110,6 +135,7 @@ void NeoServer::request(const std::string& method, const T& t)
 
   if (mid == 0)
     throw std::runtime_error("function '" + method + "' not found");
-  request(mid, t);
+
+  return request(mid, t);
 }
 
