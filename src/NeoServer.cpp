@@ -147,28 +147,28 @@ msgpack::object NeoServer::grab(uint64_t mid)
 void *NeoServer::listen(void *pthis)
 {
   NeoServer& self = *reinterpret_cast<NeoServer*>(pthis);
+  msgpack::unpacked un;
   while (self.sock.recv(self.up)) {
-    msgpack::unpacked un;
-    self.up.next(&un);
+    while (self.up.next(&un)) {
+      msgpack::object_array reply_ar = un.get().via.array;
+      auto reply = [&](size_t i) { return reply_ar.ptr[i]; };
+      size_t len = reply_ar.size;
 
-    msgpack::object_array reply_ar = un.get().via.array;
-    auto reply = [&](size_t i) { return reply_ar.ptr[i]; };
-    size_t len = reply_ar.size;
-    
-    // The first field must be the message type; either RESPONSE or NOTIFY.
-    if (reply(0) == RESPONSE && len == 4) {
-      // A msgpack response is either: 
-      //    (RESPONSE, id,   nil, ret)
-      // or (RESPONSE, id, error, nil)
-      uint64_t rid = reply(1).convert();
-      msgpack::object val = reply( reply(2).is_nil() ? 3 : 2 );
-      self.replies.emplace_back(rid, val);
-    } else if (reply(0) == NOTIFY && len == 3) {
-      // A msgpack notification looks like: (NOTIFY, name, args)
-      self.notifications.emplace_back(reply(1).as<std::string>(), 
-                                      reply(2));
-    } else {
-      std::cerr << "Unknown message type (" << reply(0).via.u64 << ")\n";
+      // The first field must be the message type; either RESPONSE or NOTIFY.
+      if (reply(0) == RESPONSE && len == 4) {
+        // A msgpack response is either: 
+        //    (RESPONSE, id,   nil, ret)
+        // or (RESPONSE, id, error, nil)
+        uint64_t rid = reply(1).convert();
+        msgpack::object val = reply( reply(2).is_nil() ? 3 : 2 );
+        self.replies.emplace_back(rid, val);
+      } else if (reply(0) == NOTIFY && len == 3) {
+        // A msgpack notification looks like: (NOTIFY, name, args)
+        self.notifications.emplace_back(reply(1).as<std::string>(), 
+                                        reply(2));
+      } else {
+        std::cerr << "Unknown message type (" << reply(0).via.u64 << ")\n";
+      }
     }
   }
 
