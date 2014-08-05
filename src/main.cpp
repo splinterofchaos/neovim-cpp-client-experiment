@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <map>
+#include <list>
 #include <utility>
 #include <tuple>
 
@@ -106,11 +107,18 @@ WordsError words(StringIt it, StringIt end, Inserter inserter)
   return WordsError::OK;
 }
 
+void cout_reply(const NeoServer::Reply& reply)
+{
+  std::cout << '[' << std::get<0>(reply) << "] ";
+  std::cout << std::get<1>(reply) << std::endl;
+}
 
 /// Provides RAII for a connection that asynchronously listens to the server.
 struct Listener
 {
   pthread_t worker;
+
+  static std::list<NeoServer::Reply> replies;
 
   Listener(NeoServer& serv)
   {
@@ -118,6 +126,24 @@ struct Listener
     keepGoing = true;
     if (pthread_create(&worker, nullptr, listen, nullptr) != 0)
       die_errno("spawning listener with pthread_create()");
+  }
+
+  msgpack::object grab(uint64_t mid)
+  {
+    msgpack::object o;
+    uint64_t maxid = pserv->id;
+    for (auto& rep : replies) {
+      maxid = std::max(std::get<0>(rep), maxid);
+      if (std::get<0>(rep) == mid) {
+        msgpack::object o = std::get<1>(rep);
+        replies.remove(rep);
+        return o;
+      }
+    }
+
+    // It probably hasn't been added yet.
+    usleep(100);
+    return grab(mid);
   }
 
   ~Listener()
@@ -133,19 +159,15 @@ private:
   static void *listen(void *)
   {
     // FIXME: For now, just print replies to the screen as fast as they come.
-    while (keepGoing) {
-      uint64_t mid;
-      msgpack::object o;
-      std::tie(mid, o) = pserv->receive();
-      std::cout << "\n[" << mid << "]: ";
-      std::cout << o << std::endl;
-    }
+    while (keepGoing)
+      replies.emplace_back(pserv->receive());
 
     return nullptr;
   }
 };
 bool Listener::keepGoing = true;
 NeoServer* Listener::pserv = nullptr;
+std::list<NeoServer::Reply> Listener::replies;
 
 int main()
 {
@@ -169,6 +191,12 @@ int main()
 
     if (line == "quit")
       break;
+
+    if (line == "?pending") {
+      for (const auto& rep : Listener::replies)
+        cout_reply(rep);
+      continue;
+    }
 
     std::vector<std::string> ws;
     auto wordsError = words(std::begin(line), 
@@ -198,10 +226,13 @@ int main()
         args.emplace_back(*it);
     }
 
-    // Send the request. `Listener` will read the response.
+    uint64_t id = serv.id;
+
     if (std::isdigit(ws[0][0]))
       serv.request(std::stoi(ws[0]), args);
     else
       serv.request(ws[0], args);
+
+    std::cout << listener.grab(id) << std::endl;
   }
 }

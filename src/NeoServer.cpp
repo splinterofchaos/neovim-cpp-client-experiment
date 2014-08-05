@@ -85,7 +85,7 @@ NeoServer::NeoServer()
 
   // Request the API data.
   request(0);
-  std::pair<uint64_t, msgpack::object> res = receive();
+  Reply res = receive();
   id = std::get<0>(res);
   std::vector<msgpack::object> resultObj = std::get<1>(res).convert();
 
@@ -121,7 +121,7 @@ NeoServer::NeoServer()
   }
 }
 
-std::pair<uint64_t, msgpack::object> NeoServer::receive()
+NeoServer::Reply NeoServer::receive()
 {
   sock.recv(up);
 
@@ -138,7 +138,7 @@ std::pair<uint64_t, msgpack::object> NeoServer::receive()
 
   std::vector<msgpack::object> reply = res.get().convert();
 
-  std::pair<uint64_t, msgpack::object> ret;
+  Reply ret;
 
   // The first field must be the message type; either RESPONSE or NOTIFY.
   if (reply[0] == RESPONSE) {
