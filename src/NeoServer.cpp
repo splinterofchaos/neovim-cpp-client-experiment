@@ -147,8 +147,7 @@ msgpack::object NeoServer::grab(uint64_t mid)
 void *NeoServer::listen(void *pthis)
 {
   NeoServer& self = *reinterpret_cast<NeoServer*>(pthis);
-  while (true) {
-    self.sock.recv(self.up);
+  while (self.sock.recv(self.up)) {
 
     msgpack::unpacked un;
     self.up.next(&un);
@@ -182,6 +181,8 @@ void *NeoServer::listen(void *pthis)
       std::cerr << "Unknown message type (" << reply(0).via.u64 << ")\n";
     }
   }
+
+  std::cout << "Socket closed; vim probably exited.\n";
 
   return nullptr;
 }
