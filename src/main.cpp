@@ -183,7 +183,7 @@ int main()
     uint64_t id = std::isdigit(ws[0][0]) ? std::stoi(ws[0])
                                          : server->method_id(ws[0]);
 
-    id = server->request(id, args);
+    id = server->request_with(id, args);
 
     std::cout << server->grab(id) << std::endl;
   }

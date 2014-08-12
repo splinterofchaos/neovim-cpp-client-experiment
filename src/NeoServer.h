@@ -88,15 +88,19 @@ struct NeoServer
   /// @returns zero when the function is not found
   uint64_t method_id(const std::string&);
 
-  /// Requests the value of method(t) from the server by id.
+  /// Requests the value of a method with no arguments.
   /// @return The id to expect a response with.
-  template<typename T = std::vector<int>>
-  uint64_t request(uint64_t, const T& t = T{});
+  uint64_t request(uint64_t);
 
-  /// Requests the value of method(t) from the server by name.
+  /// Requests the value of method(t).
   /// @return The id to expect a response with.
-  template<typename T = std::vector<int>>
-  uint64_t request(const std::string&, const T& t = T{});
+  template<typename...T>
+  uint64_t request(uint64_t, const T&...t);
+
+  /// Requests the value of method with the arguments in v.
+  /// @return The id to expect a response with.
+  template<typename V=std::vector<msgpack::object>>
+  uint64_t request_with(uint64_t, const V& v={});
 
   /// Pull a specific reply from `replies`.
   msgpack::object grab(uint64_t);
@@ -126,30 +130,35 @@ struct Buffer
   Buffer();
 };
 
-template<typename T>
-uint64_t NeoServer::request(uint64_t method, const T& t)
+template<typename...T>
+uint64_t NeoServer::request(uint64_t method, const T&...t)
 {
   msgpack::sbuffer sbuf;
-
   msgpack::packer<msgpack::sbuffer> pk(&sbuf);
-  pk.pack_array(4) << (uint64_t)REQUEST  // type
-                   << id                 // msg id
-                   << method             // method
-                   << t;                 // [args]
+  pk.pack_array(4) << (uint64_t)REQUEST
+                   << id
+                   << method;
+
+  pk.pack_array(sizeof...(t));
+  void((pk << t)...);
 
   sock.send(sbuf);
 
   return id++;
 }
 
-template<typename T>
-uint64_t NeoServer::request(const std::string& method, const T& t)
+template<typename V>
+uint64_t NeoServer::request_with(uint64_t method, const V& v)
 {
-  uint64_t mid = method_id(method);
+  msgpack::sbuffer sbuf;
+  msgpack::packer<msgpack::sbuffer> pk(&sbuf);
+  pk.pack_array(4) << (uint64_t)REQUEST
+                   << id
+                   << method
+                   << v;
 
-  if (mid == 0)
-    throw std::runtime_error("function '" + method + "' not found");
+  sock.send(sbuf);
 
-  return request(mid, t);
+  return id++;
 }
 
