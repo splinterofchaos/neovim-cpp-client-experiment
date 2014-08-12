@@ -106,6 +106,12 @@ struct NeoServer
   /// Pull a specific reply from `replies`.
   msgpack::object grab(uint64_t);
 
+  template<typename T>
+  void grab(uint64_t id, T& x)
+  {
+    grab(id).convert(x);
+  }
+
 private:
   /// Ran in a separate thread, reads continuously from the server and updates
   /// the replies list.
