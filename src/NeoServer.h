@@ -83,6 +83,11 @@ struct NeoServer
   /// Returns a copy of all pending messages.
   std::vector<Reply> pending();
 
+  /// Gets the id of a function for use with request().
+  /// @returns non-zero on success
+  /// @returns zero when the function is not found
+  uint64_t method_id(const std::string&);
+
   /// Requests the value of method(t) from the server by id.
   /// @return The id to expect a response with.
   template<typename T = std::vector<int>>
@@ -140,14 +145,7 @@ uint64_t NeoServer::request(uint64_t method, const T& t)
 template<typename T>
 uint64_t NeoServer::request(const std::string& method, const T& t)
 {
-  uint64_t mid = 0;
-
-  for (const NeoFunc& nf : functions) {
-    if (nf.name == method) {
-      mid = nf.id;
-      break;
-    }
-  }
+  uint64_t mid = method_id(method);
 
   if (mid == 0)
     throw std::runtime_error("function '" + method + "' not found");

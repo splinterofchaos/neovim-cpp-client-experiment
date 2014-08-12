@@ -146,6 +146,16 @@ std::vector<NeoServer::Reply> NeoServer::pending()
   return std::vector<NeoServer::Reply>(std::begin(replies), std::end(replies));
 }
 
+uint64_t NeoServer::method_id(const std::string& name)
+{
+  for (const NeoFunc& nf : functions) {
+    if (nf.name == name)
+      return nf.id;
+  }
+
+  return 0;
+}
+
 msgpack::object NeoServer::grab(uint64_t mid)
 {
   msgpack::object o;

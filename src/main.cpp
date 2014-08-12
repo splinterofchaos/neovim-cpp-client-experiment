@@ -180,12 +180,10 @@ int main()
         args.emplace_back(*it);
     }
 
-    uint64_t id;
+    uint64_t id = std::isdigit(ws[0][0]) ? std::stoi(ws[0])
+                                         : server->method_id(ws[0]);
 
-    if (std::isdigit(ws[0][0]))
-      id = server->request(std::stoi(ws[0]), args);
-    else
-      id = server->request(ws[0], args);
+    id = server->request(id, args);
 
     std::cout << server->grab(id) << std::endl;
   }
