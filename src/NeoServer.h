@@ -89,19 +89,21 @@ struct NeoServer
   /// @returns zero when the function is not found
   uint64_t method_id(const std::string&);
 
-  /// Requests the value of a method with no arguments.
-  /// @return The id to expect a response with.
-  uint64_t request(uint64_t);
-
   /// Requests the value of method(t).
   /// @return The id to expect a response with.
   template<typename...T>
   uint64_t request(uint64_t, const T&...t);
 
+  template<typename...T>
+  uint64_t request(const std::string&, const T&...t);
+
   /// Requests the value of method with the arguments in v.
   /// @return The id to expect a response with.
   template<typename V=std::vector<msgpack::object>>
   uint64_t request_with(uint64_t, const V& v={});
+
+  template<typename V=std::vector<msgpack::object>>
+  uint64_t request_with(const std::string&, const V& v={});
 
   /// Pull a specific reply from `replies`.
   msgpack::object grab(uint64_t);
@@ -154,6 +156,12 @@ uint64_t NeoServer::request(uint64_t method, const T&...t)
   return id++;
 }
 
+template<typename...T>
+uint64_t NeoServer::request(const std::string& method, const T&...t)
+{
+  return request(method_id(method), std::forward<T>(t)...);
+}
+
 template<typename V>
 uint64_t NeoServer::request_with(uint64_t method, const V& v)
 {
@@ -169,3 +177,8 @@ uint64_t NeoServer::request_with(uint64_t method, const V& v)
   return id++;
 }
 
+template<typename V>
+uint64_t NeoServer::request_with(const std::string& method, const V& v)
+{
+  return request(method_id(method), v);
+}

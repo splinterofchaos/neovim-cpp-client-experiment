@@ -157,11 +157,6 @@ uint64_t NeoServer::method_id(const std::string& name)
   return 0;
 }
 
-uint64_t NeoServer::request(uint64_t method)
-{
-  return request(method, std::vector<int>{});
-}
-
 msgpack::object NeoServer::grab(uint64_t mid)
 {
   msgpack::object o;
