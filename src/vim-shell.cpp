@@ -2,8 +2,8 @@
 #include "Socket.h"
 #include "NeoServer.h"
 
+#include <algorithm>
 #include <string>
-
 #include <iostream>
 #include <map>
 #include <list>
@@ -107,6 +107,9 @@ WordsError words(StringIt it, StringIt end, Inserter inserter)
   return WordsError::OK;
 }
 
+/// Converts a string to a msgpack object for sending to vim.
+msgpack::object read_object(const std::string& str);
+
 void cout_reply(const NeoServer::Reply& reply)
 {
   std::cout << '[' << std::get<0>(reply) << "] ";
@@ -169,16 +172,8 @@ int main()
 
     std::vector<msgpack::object> args;
 
-    for (auto it=std::begin(ws)+1; it != std::end(ws); it++) {
-      if (std::isdigit((*it)[0]))
-        args.emplace_back(std::stoi(*it));
-      else if (*it == "true" || *it == "True" || *it == "TRUE")
-        args.emplace_back(true);
-      else if (*it == "false" || *it == "False" || *it == "FALSE")
-        args.emplace_back(false);
-      else 
-        args.emplace_back(*it);
-    }
+    std::transform(std::begin(ws)+1, std::end(ws), 
+                   std::back_inserter(args), read_object);
 
     uint64_t id = std::isdigit(ws[0][0]) ? std::stoi(ws[0])
                                          : server->method_id(ws[0]);
@@ -187,4 +182,18 @@ int main()
 
     std::cout << server->grab(id) << std::endl;
   }
+}
+
+msgpack::object read_object(const std::string& str)
+{
+  msgpack::object o;
+  if (std::isdigit(str[0]))
+    o = std::stoi(str);
+  else if (str == "true" || str == "True" || str == "TRUE")
+    o = true;
+  else if (str == "false" || str == "False" || str == "FALSE")
+    o = false;
+  else 
+    o = str;
+  return o;
 }

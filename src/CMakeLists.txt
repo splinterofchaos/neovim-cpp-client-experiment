@@ -1,5 +1,5 @@
 # add_executable(neovimgen neovimgen.cpp)
-add_executable(cvim main.cpp)
+add_executable(vsh vim-shell.cpp)
 # set_target_properties(neovimgen PROPERTIES COMPILE_FLAGS -DNEOVIM_NO_AUTO=1)
 # target_link_libraries(neovimgen ${MSGPACK_LIBRARIES})
 
@@ -10,13 +10,12 @@ add_executable(cvim main.cpp)
 # )
 find_package (Threads)
 
-set(NEOVIM_CURSED_SOURCES Socket.cpp)
+set(NEOVIM_SHELL_SOURCES Socket.cpp)
 
 add_library(Socket Socket.cpp)
 add_library(NeoServer NeoServer.cpp)
 
-target_link_libraries( cvim 
+target_link_libraries( vsh
                        ${MSGPACK_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT}
                        Socket NeoServer
                      )
-target_link_libraries(cvim )
