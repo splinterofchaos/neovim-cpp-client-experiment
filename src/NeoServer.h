@@ -111,7 +111,7 @@ struct NeoServer
   template<typename T>
   void grab(uint64_t id, T& x)
   {
-    grab(id).convert(x);
+    grab(id).convert(&x);
   }
 
 private:
@@ -130,6 +130,7 @@ private:
 /// Global instance of the neovim server.
 extern NeoServer *server;
 
+namespace vim {
 /// A virtual neovim buffer.
 struct Buffer
 {
@@ -138,18 +139,40 @@ struct Buffer
   /// Obtains the current buffer.
   Buffer();
 };
+}
+
+namespace detail {
+using Packer = msgpack::packer<msgpack::sbuffer>;
+
+template<typename X>
+Packer& pack(Packer& pk, const X& x)
+{
+  return pk << x;
+}
+template<typename X, typename Y, typename...Z>
+Packer& pack(Packer& pk, const X &x, const Y &y, const Z &...z)
+{
+  return pack(pack(pk, x), y, z...);
+}
+
+
+static Packer& pack(Packer& pk)
+{
+  return pk;
+}
+} // namespace detail
 
 template<typename...T>
 uint64_t NeoServer::request(uint64_t method, const T&...t)
 {
   msgpack::sbuffer sbuf;
-  msgpack::packer<msgpack::sbuffer> pk(&sbuf);
+  detail::Packer pk(&sbuf);
   pk.pack_array(4) << (uint64_t)REQUEST
                    << id
                    << method;
 
   pk.pack_array(sizeof...(t));
-  void((pk << t)...);
+  detail::pack(pk, t...);
 
   sock.send(sbuf);
 
@@ -159,14 +182,14 @@ uint64_t NeoServer::request(uint64_t method, const T&...t)
 template<typename...T>
 uint64_t NeoServer::request(const std::string& method, const T&...t)
 {
-  return request(method_id(method), std::forward<T>(t)...);
+  return request(method_id(method), t...);
 }
 
 template<typename V>
 uint64_t NeoServer::request_with(uint64_t method, const V& v)
 {
   msgpack::sbuffer sbuf;
-  msgpack::packer<msgpack::sbuffer> pk(&sbuf);
+  detail::Packer pk(&sbuf);
   pk.pack_array(4) << (uint64_t)REQUEST
                    << id
                    << method
