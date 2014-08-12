@@ -61,7 +61,8 @@ struct NeoServer
   /// The type returned by request().
   using Reply = std::pair<uint64_t, msgpack::object>;
 
-  uint32_t id; ///< The id of the next message.
+  uint32_t id;    ///< The id of the next message.
+  uint32_t chan;  ///< The channel we communicate through.
 
   UnixSocket sock;
   std::string address;

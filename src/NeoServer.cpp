@@ -104,7 +104,8 @@ NeoServer::NeoServer()
   std::cout << "Requesting API data...\n";
   Reply res = grab(request(0)).convert();
 
-  std::cout << '#' << std::get<0>(res) << '\n';
+  chan = std::get<0>(res);
+  std::cout << "channel: " << chan << '\n';
 
 #if MSGPACK_VERSION_MINOR >= 6
   msgpack::object_str raw = std::get<1>(res).via.str;
