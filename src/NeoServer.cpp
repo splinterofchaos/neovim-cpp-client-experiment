@@ -4,7 +4,39 @@
 #include <unistd.h>  // fork()
 #include <fcntl.h>
 
+#include <sstream>
+
 #include "NeoServer.h"
+
+namespace std {
+  string to_string(msgpack::type::object_type type)
+  {
+    switch(type) {
+     case msgpack::type::NIL               :  return "nil";
+     case msgpack::type::BOOLEAN           :  return "bool";
+     case msgpack::type::POSITIVE_INTEGER  :  return "+int";
+     case msgpack::type::NEGATIVE_INTEGER  :  return "-int";
+     case msgpack::type::DOUBLE            :  return "double";
+#if MSGPACK_VERSION_MINOR >= 6
+     // msgpack 0.6 differentiates between raw data (BIN) and strings.
+     case msgpack::type::STR               :  return "string";
+     case msgpack::type::BIN               :  return "binary";
+#else
+     case msgpack::type::RAW               :  return "raw";
+#endif
+     case msgpack::type::ARRAY             :  return "array";
+     case msgpack::type::MAP               :  return "map";
+     default: return "unknown type";
+    }
+  }
+
+  string to_string(msgpack::object o)
+  {
+    std::stringstream ss;
+    ss << o;
+    return ss.str();
+  }
+}
 
 std::ostream& operator<< (std::ostream& os, const NeoFunc::Param& p)
 {

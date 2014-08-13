@@ -7,6 +7,11 @@
 
 #include "Socket.h"
 
+namespace std {
+  string to_string(msgpack::type::object_type);
+  string to_string(msgpack::object);
+}
+
 struct NeoFunc;
 struct NeoServer;
 //struct Buffer;
