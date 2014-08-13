@@ -125,6 +125,12 @@ int main()
   for (NeoFunc& nf : server->functions)
     std::cout << nf << '\n';
 
+  Data buf = current(serv, "buffer");
+  std::cout << "Current buffer: " << buf.id << "\n";
+  std::cout << "Current size: " << serv.grab(buf.get("length")) << '\n';
+  std::cout << "First ten lines:\n" <<
+    serv.grab(buf.get("slice", 0, 10, true, true)) << '\n';
+
   while (true)
   {
     if (server->notifications.size()) { 

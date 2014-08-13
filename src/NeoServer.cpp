@@ -211,4 +211,11 @@ void *NeoServer::listen(void *pthis)
 
   return nullptr;
 }
-  
+
+Data current(NeoServer &serv, const std::string &prop)
+{
+  auto idObj = serv.grab(serv.request("vim_get_current_" + prop));
+  if (idObj.type != msgpack::type::POSITIVE_INTEGER)
+    std::cerr << "Expected +int, got (value):" << idObj << std::endl;
+  return {serv, prop, idObj.as<uint64_t>()};
+}

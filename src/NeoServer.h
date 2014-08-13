@@ -9,7 +9,7 @@
 
 struct NeoFunc;
 struct NeoServer;
-struct Buffer;
+//struct Buffer;
 
 struct NeoFunc
 {
@@ -97,6 +97,9 @@ struct NeoServer
   template<typename...T>
   uint64_t request(const std::string&, const T&...t);
 
+  template<typename Ret, typename...T>
+  Ret demand(const std::string&, const T&...t);
+
   /// Requests the value of method with the arguments in v.
   /// @return The id to expect a response with.
   template<typename V=std::vector<msgpack::object>>
@@ -126,6 +129,39 @@ private:
 
   msgpack::unpacker up;  ///< Storage for msgpack objects. Used by `listen()`.
 };
+
+struct Data
+{
+  NeoServer &serv;
+  std::string prefix;
+  uint64_t id;
+
+  /// Requests a data member.
+  /// Same as server.request("<prefix>_get_<mem>", id, args)
+  template<typename...T>
+  uint64_t get(const std::string &, const T &...);
+
+  /// Sets a data member.
+  /// Same as server.request("<prefix>_set_<mem>", id, args)
+  template<typename...T>
+  uint64_t set(const std::string &, const T &...);
+};
+
+template<typename...T>
+uint64_t Data::get(const std::string &mem, const T &...args)
+{
+  return serv.request(prefix + ("_get_" + mem), id, args...);
+}
+
+template<typename...T>
+uint64_t Data::set(const std::string &mem, const T &...args)
+{
+  return serv.request(prefix + ("_set_" + mem), id, args...);
+}
+
+/// Equivalent to grab(request("vim_get_current_<prop>")),
+/// but constructs a Data object.
+Data current(NeoServer &serv, const std::string &prop);
 
 /// Global instance of the neovim server.
 extern NeoServer *server;
@@ -183,6 +219,12 @@ template<typename...T>
 uint64_t NeoServer::request(const std::string& method, const T&...t)
 {
   return request(method_id(method), t...);
+}
+
+template<typename Ret, typename...T>
+Ret NeoServer::demand(const std::string& method, const T&...t)
+{
+  return grab(request(method_id(method), t...)).convert();
 }
 
 template<typename V>
