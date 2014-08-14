@@ -3,6 +3,9 @@
 #include <string>
 #include <vector>
 
+#include <condition_variable>
+#include <thread>
+
 #include <msgpack.hpp>
 
 #include "Socket.h"
@@ -38,13 +41,6 @@ struct NeoFunc
 
 std::ostream& operator<< (std::ostream&, const NeoFunc::Param&);
 std::ostream& operator<< (std::ostream& os, const NeoFunc& nf);
-
-struct ScopedLock
-{
-  pthread_mutex_t* m;
-  ScopedLock(pthread_mutex_t&);
-  ~ScopedLock();
-};
 
 /// Manages the state of a connection to a running instance of nvim.
 ///
@@ -129,15 +125,15 @@ private:
   /// Ran in a separate thread, reads continuously from the server and updates
   /// the replies list.
   static void *listen(void *);
-  pthread_t worker;             ///< runs `listen()`
+  std::thread worker;           ///< runs `listen()`
 
-  std::list<Reply> replies;     ///< Replies waiting to get grab()ed.
-  pthread_mutex_t repliesLock;  ///< New reply from vim available.
-  pthread_cond_t newReply;      ///< New reply from vim available.
+  std::list<Reply> replies;  ///< Replies waiting to get grab()ed.
+  std::mutex repliesLock;    ///< New reply from vim available.
+  std::condition_variable newReply;  ///< New reply from vim available.
 
   std::list<Note>  notifications;
-  pthread_mutex_t notesLock;
-  pthread_cond_t newNote;
+  std::mutex notesLock;
+  std::condition_variable newNote;
 };
 
 struct Data

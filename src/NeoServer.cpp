@@ -64,16 +64,6 @@ std::ostream& operator<< (std::ostream& os, const NeoFunc& nf)
   return os;
 }
 
-ScopedLock::ScopedLock(pthread_mutex_t& ref) : m(&ref)
-{
-  pthread_mutex_lock(m);
-}
-
-ScopedLock::~ScopedLock()
-{
-  pthread_mutex_unlock(m);
-}
-
 bool try_connect(NeoServer& serv)
 {
   // Guess the server's address.
@@ -128,12 +118,7 @@ NeoServer::NeoServer()
   }
 
   // Start the thread to read from the server.
-  repliesLock = PTHREAD_MUTEX_INITIALIZER;
-  notesLock   = PTHREAD_MUTEX_INITIALIZER;
-  newReply    = PTHREAD_COND_INITIALIZER;
-  newNote     = PTHREAD_COND_INITIALIZER;
-  if (pthread_create(&worker, nullptr, listen, this) != 0)
-    die_errno("spawning listener with pthread_create()");
+  worker = std::thread(listen, this);
 
   std::cout << "Requesting API data...\n";
   Reply res = grab(request(0)).convert();
@@ -172,22 +157,20 @@ NeoServer::NeoServer()
 
 NeoServer::~NeoServer()
 {
-  pthread_cond_destroy(&newReply);
-  pthread_cond_destroy(&newNote);
-  pthread_cancel(worker);
 }
 
 std::vector<NeoServer::Reply> NeoServer::pending()
 {
-  ScopedLock l(repliesLock);
+  std::unique_lock<std::mutex> lk(repliesLock);
   return std::vector<NeoServer::Reply>(std::begin(replies), std::end(replies));
 }
 
 std::vector<NeoServer::Note> NeoServer::inquire()
 {
-  ScopedLock l(notesLock);
+  notesLock.lock();
   std::vector<NeoServer::Note> ret(std::begin(notifications),
                                    std::end(notifications));
+  notesLock.unlock();
   notifications.clear();
   return ret;
 }
@@ -204,7 +187,7 @@ uint64_t NeoServer::method_id(const std::string& name)
 
 msgpack::object NeoServer::grab(uint64_t mid)
 {
-  ScopedLock l(repliesLock);
+  std::unique_lock<std::mutex> lk(repliesLock);
   while (true) {
     for (auto& rep : replies) {
       if (std::get<0>(rep) == mid) {
@@ -215,13 +198,13 @@ msgpack::object NeoServer::grab(uint64_t mid)
     }
 
     // It probably hasn't been added yet.
-    pthread_cond_wait(&newReply, &repliesLock);
+    newReply.wait(lk);
   }
 }
 
 bool NeoServer::grab_if_ready(uint64_t mid, msgpack::object &o)
 {
-  ScopedLock l(repliesLock);
+  std::unique_lock<std::mutex> lk(repliesLock);
   for (auto& rep : replies) {
     if (std::get<0>(rep) == mid) {
       o = std::get<1>(rep);
@@ -253,15 +236,17 @@ void *NeoServer::listen(void *pthis)
         uint64_t rid = reply(1).convert();
         msgpack::object val = reply( reply(2).is_nil() ? 3 : 2 );
 
-        ScopedLock l(self.repliesLock);
+        self.repliesLock.lock();
         self.replies.emplace_back(rid, val);
-        pthread_cond_signal(&self.newReply);  // Signal grab() to try again.
+        self.repliesLock.unlock();
+        self.newReply.notify_one();  // Signal grab() to try again.
       } else if (reply(0) == NOTIFY && len == 3) {
-        ScopedLock l(self.notesLock);
+        self.notesLock.lock();
         // A msgpack notification looks like: (NOTIFY, name, args)
         self.notifications.emplace_back(reply(1).as<std::string>(), 
                                         reply(2));
-        pthread_cond_signal(&self.newNote);
+        self.notesLock.unlock();
+        self.newNote.notify_one();
       } else {
         std::cerr << "Unknown message type (" << reply(0).via.u64 << ")\n";
       }
