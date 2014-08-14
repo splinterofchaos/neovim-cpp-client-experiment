@@ -21,29 +21,6 @@
 
 int msgpack_write_cb(void* data, const char* buf, unsigned int len);
 
-namespace std {
-  string to_string(msgpack::type::object_type type)
-  {
-    switch(type) {
-     case msgpack::type::NIL               :  return "nil";
-     case msgpack::type::BOOLEAN           :  return "bool";
-     case msgpack::type::POSITIVE_INTEGER  :  return "+int";
-     case msgpack::type::NEGATIVE_INTEGER  :  return "-int";
-     case msgpack::type::DOUBLE            :  return "double";
-#if MSGPACK_VERSION_MINOR >= 6
-     // msgpack 0.6 differentiates between raw data (BIN) and strings.
-     case msgpack::type::STR               :  return "string";
-     case msgpack::type::BIN               :  return "binary";
-#else
-     case msgpack::type::RAW               :  return "raw";
-#endif
-     case msgpack::type::ARRAY             :  return "array";
-     case msgpack::type::MAP               :  return "map";
-     default: return "unknown type";
-    }
-  }
-}
-
 enum class WordsError { 
   UNESCAPED_QUOTE, 
   ENDS_WITH_ESCAPE,
@@ -125,32 +102,34 @@ int main()
   for (NeoFunc& nf : server->functions)
     std::cout << nf << '\n';
 
-  Data buf = current(serv, "buffer");
-  std::cout << "Current buffer: " << buf.id << "\n";
-  std::cout << "Current size: " << serv.grab(buf.get("length")) << '\n';
-  std::cout << "First ten lines:\n" <<
-    serv.grab(buf.get("slice", 0, 10, true, true)) << '\n';
+  std::vector<uint64_t> waiting;  // Messages actively waiting on.
 
   while (true)
   {
-    if (server->notifications.size()) { 
-      std::cout << "Notifications:\n";
-      do {
-        NeoServer::Note note = server->notifications.front();
-        server->notifications.pop_front();
-
-        std::cout << std::get<0>(note) << ": ";
-        std::cout << std::get<1>(note) << '\n';
-      } while (server->notifications.size());
+    for (const auto& note : server->inquire()) {
+      std::cout << std::get<0>(note) << ": ";
+      std::cout << std::get<1>(note) << '\n';
     }
 
+    std::vector<uint64_t> stillWaiting;
+    for (uint64_t mid : waiting) {
+      msgpack::object o;
+      if (serv.grab_if_ready(mid, o)) {
+        std::cout << '[' << mid << ']';
+        std::cout <<  " => " << o << '\n';
+      } else {
+        stillWaiting.push_back(mid);
+      }
+    }
+    waiting = stillWaiting;
+
     std::string line;
-    std::cout << " : ";
+    std::cout << '(' << serv.id << ") : ";
     if (!std::getline(std::cin, line))
       break;
 
     if (line.size() == 0)
-      continue;
+      line = "0";
 
     if (line == "quit")
       break;
@@ -158,6 +137,14 @@ int main()
     if (line == "?pending") {
       for (const auto& rep : server->pending())
         cout_reply(rep);
+      continue;
+    }
+
+    if (line == "?waiting") {
+      std::cout << "[ ";
+      for (uint64_t rep : waiting)
+        std::cout << rep << " ";
+      std::cout << "]\n";
       continue;
     }
 
@@ -186,7 +173,10 @@ int main()
 
     id = server->request_with(id, args);
 
-    std::cout << server->grab(id) << std::endl;
+    if (!id && line != "0")
+      std::cerr << "Unrecognized method name: " << ws[0] << std::endl;
+    else
+      waiting.push_back(id);
   }
 }
 

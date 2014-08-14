@@ -75,8 +75,6 @@ struct NeoServer
   std::vector<std::string> classes;
   std::vector<NeoFunc>     functions;
 
-  std::list<Note>  notifications;
-
   NeoServer();
   ~NeoServer();
 
@@ -88,6 +86,9 @@ struct NeoServer
 
   /// Returns a copy of all pending messages.
   std::vector<Reply> pending();
+
+  /// Gets all notifications.
+  std::vector<Note> inquire();
 
   /// Gets the id of a function for use with request().
   /// @returns non-zero on success
@@ -116,6 +117,8 @@ struct NeoServer
   /// Pull a specific reply from `replies`.
   msgpack::object grab(uint64_t);
 
+  bool grab_if_ready(uint64_t, msgpack::object &);
+
   template<typename T>
   void grab(uint64_t id, T& x)
   {
@@ -127,12 +130,14 @@ private:
   /// the replies list.
   static void *listen(void *);
   pthread_t worker;             ///< runs `listen()`
+
   std::list<Reply> replies;     ///< Replies waiting to get grab()ed.
   pthread_mutex_t repliesLock;  ///< New reply from vim available.
   pthread_cond_t newReply;      ///< New reply from vim available.
 
-
-  msgpack::unpacker up;  ///< Storage for msgpack objects. Used by `listen()`.
+  std::list<Note>  notifications;
+  pthread_mutex_t notesLock;
+  pthread_cond_t newNote;
 };
 
 struct Data
@@ -223,7 +228,8 @@ uint64_t NeoServer::request(uint64_t method, const T&...t)
 template<typename...T>
 uint64_t NeoServer::request(const std::string& method, const T&...t)
 {
-  return request(method_id(method), t...);
+  uint64_t id = method_id(method);
+  return id ? request(id, t...) : 0;
 }
 
 template<typename Ret, typename...T>
@@ -250,5 +256,6 @@ uint64_t NeoServer::request_with(uint64_t method, const V& v)
 template<typename V>
 uint64_t NeoServer::request_with(const std::string& method, const V& v)
 {
-  return request(method_id(method), v);
+  uint64_t id = method_id(method);
+  return id ? request(id, v) : 0;
 }

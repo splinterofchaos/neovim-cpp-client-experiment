@@ -128,8 +128,10 @@ NeoServer::NeoServer()
   }
 
   // Start the thread to read from the server.
-  repliesLock      = PTHREAD_MUTEX_INITIALIZER;
-  newReply         = PTHREAD_COND_INITIALIZER;
+  repliesLock = PTHREAD_MUTEX_INITIALIZER;
+  notesLock   = PTHREAD_MUTEX_INITIALIZER;
+  newReply    = PTHREAD_COND_INITIALIZER;
+  newNote     = PTHREAD_COND_INITIALIZER;
   if (pthread_create(&worker, nullptr, listen, this) != 0)
     die_errno("spawning listener with pthread_create()");
 
@@ -171,12 +173,23 @@ NeoServer::NeoServer()
 NeoServer::~NeoServer()
 {
   pthread_cond_destroy(&newReply);
+  pthread_cond_destroy(&newNote);
   pthread_cancel(worker);
 }
 
 std::vector<NeoServer::Reply> NeoServer::pending()
 {
+  ScopedLock l(repliesLock);
   return std::vector<NeoServer::Reply>(std::begin(replies), std::end(replies));
+}
+
+std::vector<NeoServer::Note> NeoServer::inquire()
+{
+  ScopedLock l(notesLock);
+  std::vector<NeoServer::Note> ret(std::begin(notifications),
+                                   std::end(notifications));
+  notifications.clear();
+  return ret;
 }
 
 uint64_t NeoServer::method_id(const std::string& name)
@@ -191,8 +204,6 @@ uint64_t NeoServer::method_id(const std::string& name)
 
 msgpack::object NeoServer::grab(uint64_t mid)
 {
-  msgpack::object o;
-
   ScopedLock l(repliesLock);
   while (true) {
     for (auto& rep : replies) {
@@ -208,12 +219,28 @@ msgpack::object NeoServer::grab(uint64_t mid)
   }
 }
 
+bool NeoServer::grab_if_ready(uint64_t mid, msgpack::object &o)
+{
+  ScopedLock l(repliesLock);
+  for (auto& rep : replies) {
+    if (std::get<0>(rep) == mid) {
+      o = std::get<1>(rep);
+      replies.remove(rep);  // TODO: remove()/erase()
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void *NeoServer::listen(void *pthis)
 {
   NeoServer& self = *reinterpret_cast<NeoServer*>(pthis);
+
+  msgpack::unpacker up;
   msgpack::unpacked un;
-  while (self.sock.recv(self.up)) {
-    while (self.up.next(&un)) {
+  while (self.sock.recv(up)) {
+    while (up.next(&un)) {
       msgpack::object_array reply_ar = un.get().via.array;
       auto reply = [&](size_t i) { return reply_ar.ptr[i]; };
       size_t len = reply_ar.size;
@@ -230,9 +257,11 @@ void *NeoServer::listen(void *pthis)
         self.replies.emplace_back(rid, val);
         pthread_cond_signal(&self.newReply);  // Signal grab() to try again.
       } else if (reply(0) == NOTIFY && len == 3) {
+        ScopedLock l(self.notesLock);
         // A msgpack notification looks like: (NOTIFY, name, args)
         self.notifications.emplace_back(reply(1).as<std::string>(), 
                                         reply(2));
+        pthread_cond_signal(&self.newNote);
       } else {
         std::cerr << "Unknown message type (" << reply(0).via.u64 << ")\n";
       }
