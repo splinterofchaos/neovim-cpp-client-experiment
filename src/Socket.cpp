@@ -59,24 +59,11 @@ std::string UnixSocket::recv()
 
 int UnixSocket::recv(msgpack::unpacker& up)
 {
-  char buf[MAX_SIZE];
-  size_t len = ::recv(fd, buf, MAX_SIZE, 0);
-  std::copy( buf, buf+len, up.buffer() );
+  up.reserve_buffer(MAX_SIZE);
+  size_t len = ::recv(fd, up.buffer(), MAX_SIZE, 0);
   up.buffer_consumed(len);
   return len;
 }
-
-#if MSGPACK_VERSION_MINOR >= 6
-msgpack::unpacker UnixSocket::recv_msgpack()
-{
-  char buf[MAX_SIZE];
-  size_t len = ::recv(fd, buf, MAX_SIZE, 0);
-  msgpack::unpacker up(len);
-  std::copy( buf, buf+len, up.buffer() );
-  up.buffer_consumed(len);
-  return std::move(up);
-}
-#endif
 
 UnixSocket::operator bool()
 {

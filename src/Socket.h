@@ -24,11 +24,6 @@ struct UnixSocket
   std::string recv();
   int recv(msgpack::unpacker&);
 
-#if MSGPACK_VERSION_MINOR >= 6
-  // msgpack 0.6 makes unpacker move-enabled.
-  msgpack::unpacker recv_msgpack();
-#endif
-
   operator bool();
 };
 
