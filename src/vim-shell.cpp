@@ -129,7 +129,7 @@ int main()
       break;
 
     if (line.size() == 0)
-      line = "0";
+      continue;
 
     if (line == "quit")
       break;
